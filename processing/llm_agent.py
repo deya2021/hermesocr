@@ -1,129 +1,143 @@
 import ollama
-from typing import List, Dict, Optional
+from typing import List, Dict
 from config.settings import settings
 
+
 class LLMAgent:
-    """Hermes3 agent for wiki generation and analysis"""
+    """
+    LLM agent for wiki generation.
+    Uses llama3.2:1b (fast on CPU) with short prompts.
+    hermes3:8b is kept as fallback for future GPU use.
+    """
 
     def __init__(self):
-        self.model = settings.ollama_llm_model
-        self.host = settings.ollama_host
+        # llama3.2:1b is ~5x faster than hermes3:8b on CPU
+        self.model  = "llama3.2:1b"
+        self.host   = settings.ollama_host
         self.client = ollama.Client(host=self.host)
 
-    def _chat(self, system: str, user: str, temperature: float = 0.3) -> str:
+        # Max tokens per call — keep short to stay fast on CPU
+        self.fast_opts   = {"temperature": 0.1, "num_predict": 300}
+        self.normal_opts = {"temperature": 0.3, "num_predict": 500}
+        self.creative_opts = {"temperature": 0.5, "num_predict": 600}
+
+    # ──────────────────────────────────────────────────────────
+    # Internal
+    # ──────────────────────────────────────────────────────────
+
+    def _chat(self, system: str, user: str, opts: dict = None) -> str:
+        if opts is None:
+            opts = self.normal_opts
         try:
-            response = self.client.chat(
+            resp = self.client.chat(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system},
-                    {"role": "user",   "content": user}
+                    {"role": "user",   "content": user},
                 ],
-                options={"temperature": temperature}
+                options=opts,
             )
-            return response['message']['content'].strip()
+            return resp["message"]["content"].strip()
         except Exception as e:
             return f"<!-- LLM ERROR: {e} -->"
 
-    def extract_topics(self, conversation_text: str) -> List[str]:
-        """Extract main topics from a conversation"""
-        system = """You are a knowledge extraction assistant.
-Extract the main topics discussed in this conversation.
-Return ONLY a JSON array of short topic strings (2-4 words each), max 5 topics.
-Example: ["python decorators", "async programming", "database optimization"]"""
+    # ──────────────────────────────────────────────────────────
+    # 1. Extract topics  (fast — JSON array)
+    # ──────────────────────────────────────────────────────────
 
-        result = self._chat(system, conversation_text[:2000])
+    def extract_topics(self, text: str) -> List[str]:
+        system = (
+            "Extract the main topics from the conversation text. "
+            "Reply with ONLY a JSON array of short strings (2-4 words each), max 5. "
+            'Example: ["python async","database design","API security"]'
+        )
+        result = self._chat(system, text[:1200], self.fast_opts)
         try:
             import json
-            # Extract JSON array from response
-            start = result.find('[')
-            end = result.rfind(']') + 1
-            if start >= 0 and end > start:
-                return json.loads(result[start:end])
-        except:
+            s = result.find("[")
+            e = result.rfind("]") + 1
+            if s >= 0 and e > s:
+                return json.loads(result[s:e])
+        except Exception:
             pass
         return []
 
+    # ──────────────────────────────────────────────────────────
+    # 2. Summarize conversation → source wiki page
+    # ──────────────────────────────────────────────────────────
+
     def summarize_conversation(self, title: str, messages_text: str) -> str:
-        """Generate a wiki page for a single conversation"""
-        system = """You are a personal knowledge wiki writer.
-Write a concise wiki page summarizing this AI conversation.
-Format as Markdown with:
-- ## Summary (2-3 sentences)
-- ## Key Points (bullet list)
-- ## Topics
-- ## Notable Quotes (best 1-2 exchanges)
+        system = (
+            "You are a wiki writer. Write a short wiki page for this AI conversation.\n"
+            "Use Markdown. Include:\n"
+            "## Summary\n## Key Points\n## Topics\n"
+            "Be concise. Max 400 words."
+        )
+        user = f"Title: {title}\n\n{messages_text[:2000]}"
+        return self._chat(system, user, self.normal_opts)
 
-Be factual. Only describe what is explicitly in the conversation.
-Mark uncertain claims with > TODO-VERIFY"""
-
-        user = f"Conversation title: {title}\n\n{messages_text[:3000]}"
-        return self._chat(system, user)
+    # ──────────────────────────────────────────────────────────
+    # 3. Generate topic page
+    # ──────────────────────────────────────────────────────────
 
     def generate_topic_page(self, topic: str, chunks: List[str]) -> str:
-        """Generate a wiki page for a topic aggregated from many conversations"""
-        system = """You are a personal knowledge wiki writer building a Karpathy-style LLM wiki.
-Generate a comprehensive wiki page for this topic based on the provided conversation excerpts.
-Format as Markdown:
-- ## Overview
-- ## Key Concepts
-- ## Practical Applications
-- ## Open Questions (things still unclear)
-- ## Sources (list conversation references)
+        system = (
+            "You are a personal knowledge wiki writer.\n"
+            "Write a wiki page for the given topic using the conversation excerpts.\n"
+            "Markdown format:\n"
+            "## Overview\n## Key Concepts\n## Practical Notes\n## Open Questions\n"
+            "Max 500 words. Cite sources as (conv_N)."
+        )
+        excerpts = "\n---\n".join(chunks[:5])
+        user = f"Topic: {topic}\n\nExcerpts:\n{excerpts[:2500]}"
+        return self._chat(system, user, self.normal_opts)
 
-Cite sources as (conv_N). Only claim what's in the excerpts.
-Mark gaps with > TODO-VERIFY"""
-
-        chunks_text = "\n\n---\n\n".join(chunks[:10])
-        user = f"Topic: {topic}\n\nRelevant conversation excerpts:\n\n{chunks_text}"
-        return self._chat(system, user, temperature=0.4)
+    # ──────────────────────────────────────────────────────────
+    # 4. Find cross-topic connections  (dreaming phase)
+    # ──────────────────────────────────────────────────────────
 
     def find_connections(self, topics: List[str], summaries: List[str]) -> str:
-        """Dreaming: find non-obvious connections between topics"""
-        system = """You are a deep knowledge synthesizer performing memory consolidation (like dreaming).
-Analyze these topics and conversation summaries.
-Find NON-OBVIOUS connections, patterns, and emergent insights that span multiple conversations.
-Format as Markdown:
-- ## Unexpected Connections
-- ## Recurring Patterns
-- ## Emergent Insights
-- ## Knowledge Gaps to Explore
+        system = (
+            "You are analyzing a personal knowledge base to find hidden connections.\n"
+            "Markdown format:\n"
+            "## Unexpected Connections\n## Recurring Patterns\n## Emergent Insights\n"
+            "Be insightful and concise. Max 400 words."
+        )
+        topic_str   = ", ".join(topics[:20])
+        summary_str = "\n\n".join(s[:300] for s in summaries[:8])
+        user = f"Topics: {topic_str}\n\nSummaries:\n{summary_str}"
+        return self._chat(system, user, self.creative_opts)
 
-Think deeply. Surface insights that wouldn't be visible from any single conversation."""
-
-        topics_text = ", ".join(topics)
-        summaries_text = "\n\n".join(summaries[:15])
-        user = f"Topics found: {topics_text}\n\nConversation summaries:\n{summaries_text}"
-        return self._chat(system, user, temperature=0.7)
+    # ──────────────────────────────────────────────────────────
+    # 5. Compress / merge knowledge into existing page
+    # ──────────────────────────────────────────────────────────
 
     def compress_knowledge(self, old_page: str, new_chunks: List[str]) -> str:
-        """Dreaming: merge new knowledge into existing wiki page"""
-        system = """You are updating a personal knowledge wiki page with new information.
-Merge the new conversation excerpts into the existing wiki page.
-- Keep all valuable existing content
-- Add new insights and information
-- Remove redundant or outdated content
-- Highlight what changed with > 🆕 NEW prefix
-Return the complete updated wiki page in Markdown."""
+        system = (
+            "Merge new information into this wiki page.\n"
+            "Keep existing content, add new insights, remove duplicates.\n"
+            "Mark additions with '🆕'. Return full updated Markdown page. Max 600 words."
+        )
+        new_text = "\n---\n".join(new_chunks[:3])
+        user = f"EXISTING PAGE:\n{old_page[:1500]}\n\nNEW INFO:\n{new_text[:1000]}"
+        return self._chat(system, user, self.normal_opts)
 
-        new_text = "\n\n---\n\n".join(new_chunks[:5])
-        user = f"EXISTING PAGE:\n{old_page}\n\nNEW EXCERPTS TO MERGE:\n{new_text}"
-        return self._chat(system, user, temperature=0.3)
+    # ──────────────────────────────────────────────────────────
+    # 6. Generate master overview
+    # ──────────────────────────────────────────────────────────
 
     def generate_overview(self, all_topics: List[str], stats: Dict) -> str:
-        """Generate the master overview page"""
-        system = """You are writing the master overview page for a personal AI knowledge wiki.
-This wiki contains all conversations the user has had with AI assistants.
-Write an insightful overview page in Markdown:
-- ## My Knowledge Universe
-- ## Most Explored Topics
-- ## Knowledge Clusters (groups of related topics)  
-- ## Learning Journey (timeline narrative)
-- ## Recommended Deep Dives"""
-
-        user = f"""Stats:
-- Total conversations: {stats.get('conversations', 0)}
-- Total topics: {stats.get('topics', 0)}
-- Date range: {stats.get('date_range', 'unknown')}
-
-All topics: {', '.join(all_topics[:50])}"""
-        return self._chat(system, user, temperature=0.5)
+        system = (
+            "Write a master overview page for a personal AI conversation wiki.\n"
+            "Markdown format:\n"
+            "## My Knowledge Universe\n## Most Explored Topics\n"
+            "## Knowledge Clusters\n## Learning Journey\n"
+            "Max 500 words."
+        )
+        user = (
+            f"Stats: {stats.get('conversations',0)} conversations, "
+            f"{stats.get('topics',0)} topics, "
+            f"date range: {stats.get('date_range','unknown')}\n\n"
+            f"Topics: {', '.join(all_topics[:40])}"
+        )
+        return self._chat(system, user, self.creative_opts)

@@ -13,348 +13,380 @@ from rich.console import Console
 
 console = Console()
 
+
 class DreamEngine:
     """
-    Nightly memory consolidation engine (Karpathy-style LLM Wiki + Dreaming).
-    
+    Memory consolidation engine — Karpathy-style LLM Wiki.
+
     Phases:
-    1. DIGEST   - Summarize new conversations → sources/ pages
-    2. CLUSTER  - Group chunks by topic similarity
-    3. WRITE    - Generate/update topic pages
-    4. CONNECT  - Find cross-topic insights → dreams/ pages
-    5. COMPRESS - Merge redundant knowledge
-    6. INDEX    - Rebuild master index + overview
+    1. DIGEST   — summarize conversations → sources/ wiki pages
+    2. CLUSTER  — collect topics from chunks
+    3. WRITE    — generate topic pages (limited per run)
+    4. CONNECT  — find cross-topic insights → dreams/ page
+    5. COMPRESS — skip on first run (no old pages yet)
+    6. INDEX    — rebuild index.md + overview.md
+
+    Optimized for CPU-only server (no GPU):
+    - Uses llama3.2:1b (fast) instead of hermes3:8b (slow)
+    - Short prompts, low num_predict
+    - Processes max 5 convs + 5 topics per run to stay fast
+    - Each phase logs progress so failures are visible
     """
 
+    # Limits per dreaming run to stay under ~20 min on CPU
+    MAX_CONVS_PER_RUN   = 5
+    MAX_TOPICS_PER_RUN  = 5
+
     def __init__(self):
-        self.agent = LLMAgent()
-        self.embedder = Embedder()
+        self.agent     = LLMAgent()
+        self.embedder  = Embedder()
         self.wiki_path = settings.wiki_path
 
+    # ──────────────────────────────────────────────────────────
+    # Main entry point
+    # ──────────────────────────────────────────────────────────
+
     def run(self, full: bool = False) -> DreamLog:
-        """Run the full dreaming cycle"""
-        db = SessionLocal()
+        db  = SessionLocal()
         log = DreamLog(started_at=datetime.utcnow(), status="running")
         db.add(log)
         db.commit()
+        db.refresh(log)
 
         try:
             console.print("\n[bold magenta]🌙 DREAMING STARTED[/bold magenta]")
-            
-            # Phase 1: Digest new conversations
-            console.print("\n[cyan]Phase 1: DIGEST[/cyan] — Summarizing new conversations...")
-            new_convs = self._get_unprocessed_conversations(db, full)
-            console.print(f"  Found {len(new_convs)} conversations to process")
-            
-            for conv in new_convs:
-                self._digest_conversation(db, conv, log)
 
-            # Phase 2 & 3: Cluster topics and write topic pages
-            console.print("\n[cyan]Phase 2-3: CLUSTER + WRITE[/cyan] — Building topic pages...")
-            topics = self._get_all_topics(db)
-            for topic in topics[:20]:  # limit per run
-                self._write_topic_page(db, topic, log)
+            # ── Phase 1: DIGEST ──────────────────────────────
+            console.print("\n[cyan]Phase 1/6: DIGEST[/cyan]")
+            convs = self._get_unprocessed(db, full)
+            console.print(f"  {len(convs)} conversations to digest")
+            for i, conv in enumerate(convs):
+                console.print(f"  [{i+1}/{len(convs)}] {conv.title[:60]}")
+                try:
+                    result = self._digest_one(db, conv)
+                    log.conversations_processed += 1
+                    if result == "created":
+                        log.pages_created += 1
+                    else:
+                        log.pages_updated += 1
+                    db.commit()
+                except Exception as e:
+                    console.print(f"  [red]⚠ digest error: {e}[/red]")
+                    db.rollback()
 
-            # Phase 4: Connect — find cross-topic insights
-            console.print("\n[cyan]Phase 4: CONNECT[/cyan] — Finding connections...")
-            self._find_connections(db, log)
+            # ── Phase 2-3: CLUSTER + WRITE ───────────────────
+            console.print("\n[cyan]Phase 2-3/6: CLUSTER + WRITE[/cyan]")
+            topics = self._get_top_topics(db)
+            console.print(f"  {len(topics)} topics found, writing top {min(len(topics), self.MAX_TOPICS_PER_RUN)}")
+            for i, topic in enumerate(topics[:self.MAX_TOPICS_PER_RUN]):
+                console.print(f"  [{i+1}] topic: {topic}")
+                try:
+                    result = self._write_topic_page(db, topic)
+                    if result == "created":
+                        log.pages_created += 1
+                    elif result == "updated":
+                        log.pages_updated += 1
+                    db.commit()
+                except Exception as e:
+                    console.print(f"  [red]⚠ topic error: {e}[/red]")
+                    db.rollback()
 
-            # Phase 5: Compress — merge redundant pages
-            console.print("\n[cyan]Phase 5: COMPRESS[/cyan] — Compressing knowledge...")
-            self._compress_old_pages(db, log)
+            # ── Phase 4: CONNECT ─────────────────────────────
+            console.print("\n[cyan]Phase 4/6: CONNECT[/cyan]")
+            try:
+                result = self._find_connections(db)
+                if result in ("created", "updated"):
+                    log.insights_found += 1
+                    if result == "created":
+                        log.pages_created += 1
+                db.commit()
+            except Exception as e:
+                console.print(f"  [red]⚠ connect error: {e}[/red]")
+                db.rollback()
 
-            # Phase 6: Index — rebuild master pages
-            console.print("\n[cyan]Phase 6: INDEX[/cyan] — Rebuilding index...")
-            self._rebuild_index(db, log)
+            # ── Phase 5: COMPRESS ────────────────────────────
+            console.print("\n[cyan]Phase 5/6: COMPRESS[/cyan]")
+            try:
+                updated = self._compress_pages(db)
+                log.pages_updated += updated
+                db.commit()
+            except Exception as e:
+                console.print(f"  [red]⚠ compress error: {e}[/red]")
+                db.rollback()
 
-            log.status = "done"
+            # ── Phase 6: INDEX ───────────────────────────────
+            console.print("\n[cyan]Phase 6/6: INDEX[/cyan]")
+            try:
+                self._rebuild_index(db)
+                log.pages_updated += 2
+                db.commit()
+            except Exception as e:
+                console.print(f"  [red]⚠ index error: {e}[/red]")
+                db.rollback()
+
+            log.status      = "done"
             log.finished_at = datetime.utcnow()
+            elapsed = (log.finished_at - log.started_at).seconds // 60
+            log.summary = (
+                f"Completed in {elapsed} min. "
+                f"Convs: {log.conversations_processed}, "
+                f"Created: {log.pages_created}, "
+                f"Updated: {log.pages_updated}, "
+                f"Insights: {log.insights_found}"
+            )
             db.commit()
-            
-            console.print(f"\n[bold green]✅ DREAMING COMPLETE[/bold green]")
-            console.print(f"  Conversations: {log.conversations_processed}")
-            console.print(f"  Pages created: {log.pages_created}")
-            console.print(f"  Pages updated: {log.pages_updated}")
-            console.print(f"  Insights:      {log.insights_found}")
+
+            console.print(f"\n[bold green]✅ DREAMING DONE in {elapsed} min[/bold green]")
+            console.print(f"   Convs processed : {log.conversations_processed}")
+            console.print(f"   Pages created   : {log.pages_created}")
+            console.print(f"   Pages updated   : {log.pages_updated}")
+            console.print(f"   Insights        : {log.insights_found}")
 
         except Exception as e:
-            log.status = "failed"
-            log.summary = str(e)
+            log.status      = "failed"
+            log.summary     = str(e)
             log.finished_at = datetime.utcnow()
-            db.commit()
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
             console.print(f"\n[bold red]❌ DREAMING FAILED: {e}[/bold red]")
-            raise
         finally:
             db.close()
 
         return log
 
-    # ─────────────────────────────────────────
-    # Phase 1: DIGEST
-    # ─────────────────────────────────────────
-    def _get_unprocessed_conversations(self, db: Session, full: bool) -> List[Conversation]:
-        query = db.query(Conversation)
-        if not full:
-            # Only conversations without a wiki source page
-            processed_ids = db.query(WikiPage.source_chunks).filter(
-                WikiPage.page_type == 'source'
-            ).all()
-            processed_conv_ids = set()
-            for row in processed_ids:
-                if row[0]:
-                    for cid in row[0]:
-                        processed_conv_ids.add(cid)
-            if processed_conv_ids:
-                query = query.filter(~Conversation.id.in_(processed_conv_ids))
-        return query.order_by(Conversation.created_at).limit(50).all()
+    # ──────────────────────────────────────────────────────────
+    # Phase 1 helpers
+    # ──────────────────────────────────────────────────────────
 
-    def _digest_conversation(self, db: Session, conv: Conversation, log: DreamLog):
-        """Create/update source wiki page for a conversation"""
-        # Build messages text
+    def _get_unprocessed(self, db: Session, full: bool) -> List[Conversation]:
+        """Return conversations that have no source wiki page yet."""
+        if full:
+            return (db.query(Conversation)
+                      .order_by(Conversation.created_at)
+                      .limit(self.MAX_CONVS_PER_RUN)
+                      .all())
+
+        # Find conv IDs already digested (stored in source_chunks of source pages)
+        done_ids: set = set()
+        source_pages = db.query(WikiPage.source_chunks).filter(
+            WikiPage.page_type == "source"
+        ).all()
+        for row in source_pages:
+            if row[0]:
+                done_ids.update(row[0])
+
+        q = db.query(Conversation).order_by(Conversation.created_at)
+        if done_ids:
+            q = q.filter(~Conversation.id.in_(done_ids))
+        return q.limit(self.MAX_CONVS_PER_RUN).all()
+
+    def _digest_one(self, db: Session, conv: Conversation) -> str:
+        """Summarize one conversation → source wiki page."""
         messages = sorted(conv.messages, key=lambda m: m.order_index)
-        messages_text = "\n\n".join([
-            f"**{m.role.upper()}**: {m.content[:500]}"
-            for m in messages[:20]
-        ])
 
-        # Generate wiki page content via LLM
-        content = self.agent.summarize_conversation(conv.title, messages_text)
+        # Build a compact text — first 15 messages, 400 chars each
+        msgs_text = "\n\n".join(
+            f"{m.role.upper()}: {m.content[:400]}"
+            for m in messages[:15]
+        )
 
-        # Extract and save topics back to chunks
-        topics = self.agent.extract_topics(messages_text)
+        # LLM: summarize
+        content = self.agent.summarize_conversation(conv.title, msgs_text)
+
+        # LLM: extract topics → attach to chunks
+        topics = self.agent.extract_topics(msgs_text)
+        console.print(f"    topics: {topics}")
         for chunk in conv.chunks:
             chunk.topics = topics
-        
-        # Save wiki page
+
         slug = f"sources/{conv.source.value}_{conv.id}"
-        page = self._save_wiki_page(
-            db=db,
-            slug=slug,
-            title=f"{conv.source.value.title()}: {conv.title}",
-            content=content,
-            page_type="source",
-            source_chunks=[c.id for c in conv.chunks],
-            file_subpath=f"sources/{conv.source.value}_{conv.id}.md"
+        return self._upsert_page(
+            db       = db,
+            slug     = slug,
+            title    = f"{conv.source.value.title()}: {conv.title}",
+            content  = content,
+            page_type= "source",
+            src_chunks = [c.id for c in conv.chunks],
+            subpath  = f"sources/{conv.source.value}_{conv.id}.md",
         )
 
-        db.commit()
-        log.conversations_processed += 1
-        if page == "created":
-            log.pages_created += 1
-        else:
-            log.pages_updated += 1
+    # ──────────────────────────────────────────────────────────
+    # Phase 2-3 helpers
+    # ──────────────────────────────────────────────────────────
 
-    # ─────────────────────────────────────────
-    # Phase 2-3: CLUSTER + WRITE
-    # ─────────────────────────────────────────
-    def _get_all_topics(self, db: Session) -> List[str]:
-        """Get all unique topics from chunks"""
-        chunks = db.query(Chunk.topics).filter(Chunk.topics != None).all()
-        topic_count = {}
-        for row in chunks:
-            if row[0]:
-                for t in row[0]:
-                    topic_count[t] = topic_count.get(t, 0) + 1
-        # Sort by frequency
-        return sorted(topic_count.keys(), key=lambda t: -topic_count[t])
+    def _get_top_topics(self, db: Session) -> List[str]:
+        rows = db.query(Chunk.topics).filter(Chunk.topics.isnot(None)).all()
+        counts: Dict[str, int] = {}
+        for row in rows:
+            for t in (row[0] or []):
+                counts[t] = counts.get(t, 0) + 1
+        return sorted(counts, key=lambda t: -counts[t])
 
-    def _write_topic_page(self, db: Session, topic: str, log: DreamLog):
-        """Find relevant chunks and generate/update topic wiki page"""
-        # Semantic search for this topic
-        topic_embedding = self.embedder.embed(topic)
-        
-        # Get top chunks for this topic
-        similar_chunks = db.execute(text("""
-            SELECT content, 1 - (embedding <=> CAST(:emb AS vector)) as similarity
-            FROM chunks
-            WHERE 1 - (embedding <=> CAST(:emb AS vector)) > 0.5
-            ORDER BY similarity DESC
-            LIMIT 10
-        """), {"emb": str(topic_embedding)}).fetchall()
+    def _write_topic_page(self, db: Session, topic: str) -> str:
+        emb = self.embedder.embed(topic)
+        rows = db.execute(text("""
+            SELECT content,
+                   1 - (embedding <=> CAST(:emb AS vector)) AS sim
+            FROM   chunks
+            WHERE  1 - (embedding <=> CAST(:emb AS vector)) > 0.4
+            ORDER  BY sim DESC
+            LIMIT  6
+        """), {"emb": str(emb)}).fetchall()
 
-        if not similar_chunks:
-            return
+        if not rows:
+            console.print(f"    no chunks found for topic '{topic}', skipping")
+            return "skipped"
 
-        chunk_texts = [row[0] for row in similar_chunks]
-        content = self.agent.generate_topic_page(topic, chunk_texts)
+        chunks = [r[0][:600] for r in rows]
+        content = self.agent.generate_topic_page(topic, chunks)
 
-        slug = f"topics/{topic.replace(' ', '_').lower()}"
-        result = self._save_wiki_page(
-            db=db,
-            slug=slug,
-            title=f"Topic: {topic.title()}",
-            content=content,
-            page_type="topic",
-            source_chunks=[],
-            file_subpath=f"topics/{topic.replace(' ', '_').lower()}.md"
+        safe = topic.replace(" ", "_").replace("/", "-").lower()
+        return self._upsert_page(
+            db        = db,
+            slug      = f"topics/{safe}",
+            title     = f"Topic: {topic.title()}",
+            content   = content,
+            page_type = "topic",
+            src_chunks= [],
+            subpath   = f"topics/{safe}.md",
         )
-        db.commit()
-        if result == "created":
-            log.pages_created += 1
-        else:
-            log.pages_updated += 1
 
-    # ─────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────
     # Phase 4: CONNECT
-    # ─────────────────────────────────────────
-    def _find_connections(self, db: Session, log: DreamLog):
-        """Find cross-topic insights — the real 'dreaming' phase"""
-        topics = self._get_all_topics(db)[:30]
-        if len(topics) < 3:
-            return
+    # ──────────────────────────────────────────────────────────
 
-        # Get recent source page summaries
-        recent_pages = db.query(WikiPage).filter(
-            WikiPage.page_type == 'source'
-        ).order_by(WikiPage.updated_at.desc()).limit(20).all()
+    def _find_connections(self, db: Session) -> str:
+        topics = self._get_top_topics(db)
+        if len(topics) < 2:
+            console.print("  not enough topics yet, skipping")
+            return "skipped"
 
-        summaries = [p.content[:500] for p in recent_pages]
+        pages = (db.query(WikiPage)
+                   .filter(WikiPage.page_type == "source")
+                   .order_by(WikiPage.updated_at.desc())
+                   .limit(10)
+                   .all())
+        summaries = [p.content[:300] for p in pages]
 
-        connections_content = self.agent.find_connections(topics, summaries)
-        
+        content  = self.agent.find_connections(topics, summaries)
         date_str = datetime.utcnow().strftime("%Y_%m_%d")
-        slug = f"dreams/connections_{date_str}"
-        result = self._save_wiki_page(
-            db=db,
-            slug=slug,
-            title=f"Dream: Connections — {date_str}",
-            content=connections_content,
-            page_type="dream",
-            source_chunks=[],
-            file_subpath=f"dreams/connections_{date_str}.md"
+        return self._upsert_page(
+            db        = db,
+            slug      = f"dreams/connections_{date_str}",
+            title     = f"Dream: Connections — {date_str}",
+            content   = content,
+            page_type = "dream",
+            src_chunks= [],
+            subpath   = f"dreams/connections_{date_str}.md",
         )
-        db.commit()
-        log.insights_found += 1
-        if result == "created":
-            log.pages_created += 1
 
-    # ─────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────
     # Phase 5: COMPRESS
-    # ─────────────────────────────────────────
-    def _compress_old_pages(self, db: Session, log: DreamLog):
-        """Update topic pages with recently added chunks"""
-        cutoff = datetime.utcnow() - timedelta(days=1)
-        new_chunks = db.query(Chunk).filter(
-            Chunk.created_at >= cutoff
-        ).all()
+    # ──────────────────────────────────────────────────────────
 
+    def _compress_pages(self, db: Session) -> int:
+        """Merge yesterday's new chunks into existing topic pages."""
+        cutoff     = datetime.utcnow() - timedelta(days=1)
+        new_chunks = db.query(Chunk).filter(Chunk.created_at >= cutoff).all()
         if not new_chunks:
-            return
+            console.print("  no new chunks, skipping compress")
+            return 0
 
-        # Group new chunks by topic
-        topic_new_chunks: Dict[str, List[str]] = {}
-        for chunk in new_chunks:
-            for topic in (chunk.topics or []):
-                if topic not in topic_new_chunks:
-                    topic_new_chunks[topic] = []
-                topic_new_chunks[topic].append(chunk.content)
+        # Group by topic
+        by_topic: Dict[str, List[str]] = {}
+        for ch in new_chunks:
+            for t in (ch.topics or []):
+                by_topic.setdefault(t, []).append(ch.content)
 
-        for topic, chunks in topic_new_chunks.items():
-            slug = f"topics/{topic.replace(' ', '_').lower()}"
-            page = db.query(WikiPage).filter(WikiPage.slug == slug).first()
+        updated = 0
+        for topic, chunks in list(by_topic.items())[:3]:   # max 3 per run
+            safe = topic.replace(" ", "_").replace("/", "-").lower()
+            page = db.query(WikiPage).filter(WikiPage.slug == f"topics/{safe}").first()
             if page and page.content:
-                updated = self.agent.compress_knowledge(page.content, chunks)
-                page.content = updated
-                page.updated_at = datetime.utcnow()
-                sha = hashlib.sha256(updated.encode()).hexdigest()[:16]
-                page.git_sha = sha
-                # Write to file
-                self._write_md_file(page.file_path, updated)
-                log.pages_updated += 1
+                new_content       = self.agent.compress_knowledge(page.content, chunks)
+                page.content      = new_content
+                page.updated_at   = datetime.utcnow()
+                page.git_sha      = hashlib.sha256(new_content.encode()).hexdigest()[:16]
+                self._write_md(page.file_path, new_content)
+                updated += 1
+        return updated
 
-        db.commit()
-
-    # ─────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────
     # Phase 6: INDEX
-    # ─────────────────────────────────────────
-    def _rebuild_index(self, db: Session, log: DreamLog):
-        """Rebuild master index.md and overview.md"""
-        # Stats
+    # ──────────────────────────────────────────────────────────
+
+    def _rebuild_index(self, db: Session):
         conv_count = db.query(func.count(Conversation.id)).scalar()
-        topics = self._get_all_topics(db)
-        
+        topics     = self._get_top_topics(db)
+
         dates = db.query(
             func.min(Conversation.created_at),
-            func.max(Conversation.created_at)
+            func.max(Conversation.created_at),
         ).first()
-        date_range = f"{dates[0].strftime('%Y-%m-%d') if dates[0] else '?'} → {dates[1].strftime('%Y-%m-%d') if dates[1] else '?'}"
-
-        stats = {
-            "conversations": conv_count,
-            "topics": len(topics),
-            "date_range": date_range
-        }
-
-        # Overview page
-        overview = self.agent.generate_overview(topics, stats)
-        self._save_wiki_page(
-            db=db,
-            slug="overview",
-            title="Knowledge Overview",
-            content=overview,
-            page_type="index",
-            source_chunks=[],
-            file_subpath="overview.md"
+        date_range = (
+            f"{dates[0].strftime('%Y-%m-%d') if dates[0] else '?'}"
+            f" → "
+            f"{dates[1].strftime('%Y-%m-%d') if dates[1] else '?'}"
         )
 
-        # Index page (static list)
+        # Overview page via LLM
+        overview = self.agent.generate_overview(
+            topics,
+            {"conversations": conv_count, "topics": len(topics), "date_range": date_range},
+        )
+        self._upsert_page(db, "overview", "Knowledge Overview",
+                          overview, "index", [], "overview.md")
+
+        # Static index
         pages = db.query(WikiPage).order_by(WikiPage.updated_at.desc()).all()
-        index_lines = [
+        lines = [
             "# 📚 Memory Wiki Index\n",
-            f"> Auto-generated | {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC\n",
-            f"\n**{conv_count} conversations** · **{len(topics)} topics**\n",
-            "\n## 📖 Topics\n"
+            f"> Generated {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC\n",
+            f"\n**{conv_count}** محادثات · **{len(topics)}** مواضيع\n",
         ]
-        for p in pages:
-            if p.page_type == 'topic':
-                index_lines.append(f"- [{p.title}]({p.file_path})")
-        index_lines.append("\n## 🌙 Dreams\n")
-        for p in pages:
-            if p.page_type == 'dream':
-                index_lines.append(f"- [{p.title}]({p.file_path})")
-        index_lines.append("\n## 📂 Sources\n")
-        for p in pages:
-            if p.page_type == 'source':
-                index_lines.append(f"- [{p.title}]({p.file_path})")
+        for section, ptype in [("## 📖 Topics", "topic"),
+                                ("## 🌙 Dreams", "dream"),
+                                ("## 📂 Sources", "source")]:
+            lines.append(f"\n{section}\n")
+            for p in pages:
+                if p.page_type == ptype:
+                    lines.append(f"- [{p.title}]({p.file_path})")
 
-        index_content = "\n".join(index_lines)
-        self._save_wiki_page(
-            db=db, slug="index", title="Index",
-            content=index_content, page_type="index",
-            source_chunks=[], file_subpath="index.md"
-        )
-        db.commit()
-        log.pages_updated += 2
+        self._upsert_page(db, "index", "Index",
+                          "\n".join(lines), "index", [], "index.md")
 
-    # ─────────────────────────────────────────
-    # Helpers
-    # ─────────────────────────────────────────
-    def _save_wiki_page(self, db: Session, slug: str, title: str,
-                         content: str, page_type: str,
-                         source_chunks: list, file_subpath: str) -> str:
-        sha = hashlib.sha256(content.encode()).hexdigest()[:16]
-        file_path = os.path.join(self.wiki_path, file_subpath)
+    # ──────────────────────────────────────────────────────────
+    # Shared helpers
+    # ──────────────────────────────────────────────────────────
 
-        # Write markdown file
-        self._write_md_file(file_path, content)
+    def _upsert_page(self, db: Session, slug: str, title: str,
+                     content: str, page_type: str,
+                     src_chunks: list, subpath: str) -> str:
+        sha       = hashlib.sha256(content.encode()).hexdigest()[:16]
+        file_path = os.path.join(self.wiki_path, subpath)
+        self._write_md(file_path, content)
 
-        # Upsert DB record
         page = db.query(WikiPage).filter(WikiPage.slug == slug).first()
         if page:
-            page.content = content
+            page.content    = content
             page.updated_at = datetime.utcnow()
-            page.git_sha = sha
+            page.git_sha    = sha
             return "updated"
         else:
-            page = WikiPage(
-                slug=slug, title=title, content=content,
-                page_type=page_type, file_path=file_path,
-                source_chunks=source_chunks, git_sha=sha
-            )
-            db.add(page)
+            db.add(WikiPage(
+                slug          = slug,
+                title         = title,
+                content       = content,
+                page_type     = page_type,
+                file_path     = file_path,
+                source_chunks = src_chunks,
+                git_sha       = sha,
+            ))
             return "created"
 
-    def _write_md_file(self, file_path: str, content: str):
+    def _write_md(self, file_path: str, content: str):
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        with open(file_path, 'w', encoding='utf-8') as f:
+        with open(file_path, "w", encoding="utf-8") as f:
             f.write(content)
