@@ -187,10 +187,14 @@ class DreamEngine:
         messages = sorted(conv.messages, key=lambda m: m.order_index)
 
         # Build a compact text — first 15 messages, 400 chars each
+        # Skip Markdown code-block stubs that Claude exports for unsupported content
         msgs_text = "\n\n".join(
             f"{m.role.upper()}: {m.content[:400]}"
             for m in messages[:15]
+            if m.content.strip() and not m.content.strip().startswith("```\nThis block is not supported")
         )
+        if not msgs_text:
+            msgs_text = f"(Conversation: {conv.title})"
 
         # LLM: summarize
         content = self.agent.summarize_conversation(conv.title, msgs_text)

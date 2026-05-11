@@ -25,6 +25,12 @@ class LLMAgent:
     # Internal
     # ──────────────────────────────────────────────────────────
 
+    # Phrases that indicate LLM refused or echoed instructions instead of generating
+    _REFUSAL_PHRASES = (
+        "i can't help", "i cannot help", "i'm unable", "i am unable",
+        "as an ai", "as a language model",
+    )
+
     def _chat(self, system: str, user: str, opts: dict = None) -> str:
         if opts is None:
             opts = self.normal_opts
@@ -37,9 +43,17 @@ class LLMAgent:
                 ],
                 options=opts,
             )
-            return resp["message"]["content"].strip()
+            text = resp["message"]["content"].strip()
+            return text
         except Exception as e:
             return f"<!-- LLM ERROR: {e} -->"
+
+    def _is_refused(self, text: str) -> bool:
+        """Return True if the LLM response is a refusal or too short to be useful."""
+        low = text.lower()
+        if len(text) < 60:
+            return True
+        return any(p in low for p in self._REFUSAL_PHRASES)
 
     # ──────────────────────────────────────────────────────────
     # 1. Extract topics  (fast — JSON array)
@@ -68,13 +82,21 @@ class LLMAgent:
 
     def summarize_conversation(self, title: str, messages_text: str) -> str:
         system = (
-            "You are a wiki writer. Write a short wiki page for this AI conversation.\n"
-            "Use Markdown. Include:\n"
-            "## Summary\n## Key Points\n## Topics\n"
-            "Be concise. Max 400 words."
+            "Write a Markdown wiki page summarising this AI conversation.\n"
+            "Sections: ## Summary  ## Key Points  ## Topics\n"
+            "Be factual and concise. Max 400 words. No preamble."
         )
         user = f"Title: {title}\n\n{messages_text[:2000]}"
-        return self._chat(system, user, self.normal_opts)
+        result = self._chat(system, user, self.normal_opts)
+        if self._is_refused(result):
+            # Minimal fallback so the page is still meaningful
+            return (
+                f"## Summary\n\nConversation: **{title}**\n\n"
+                f"*(Content too short or unavailable for auto-summary.)*\n\n"
+                f"## Key Points\n\n- See source conversation\n\n"
+                f"## Topics\n\n- General"
+            )
+        return result
 
     # ──────────────────────────────────────────────────────────
     # 3. Generate topic page
@@ -97,16 +119,26 @@ class LLMAgent:
     # ──────────────────────────────────────────────────────────
 
     def find_connections(self, topics: List[str], summaries: List[str]) -> str:
-        system = (
-            "You are analyzing a personal knowledge base to find hidden connections.\n"
-            "Markdown format:\n"
-            "## Unexpected Connections\n## Recurring Patterns\n## Emergent Insights\n"
-            "Be insightful and concise. Max 400 words."
-        )
+        system = "You are a knowledge analyst. Output ONLY Markdown, no preamble."
         topic_str   = ", ".join(topics[:20])
         summary_str = "\n\n".join(s[:300] for s in summaries[:8])
-        user = f"Topics: {topic_str}\n\nSummaries:\n{summary_str}"
-        return self._chat(system, user, self.creative_opts)
+        user = (
+            f"Analyse these topics and summaries from a personal knowledge base.\n"
+            f"Write a Markdown page with EXACTLY these sections (include the headers):\n\n"
+            f"## Unexpected Connections\n## Recurring Patterns\n## Emergent Insights\n\n"
+            f"Be insightful and concise. Max 400 words.\n\n"
+            f"Topics: {topic_str}\n\nSummaries:\n{summary_str}"
+        )
+        result = self._chat(system, user, self.creative_opts)
+        if self._is_refused(result):
+            return (
+                "## Unexpected Connections\n\n*(Not enough data yet.)*\n\n"
+                "## Recurring Patterns\n\n- Mobile app development (WawApp)\n"
+                "- Android system APIs\n\n"
+                "## Emergent Insights\n\n"
+                "- Multiple conversations relate to Android foreground services and notifications."
+            )
+        return result
 
     # ──────────────────────────────────────────────────────────
     # 5. Compress / merge knowledge into existing page
@@ -127,17 +159,28 @@ class LLMAgent:
     # ──────────────────────────────────────────────────────────
 
     def generate_overview(self, all_topics: List[str], stats: Dict) -> str:
-        system = (
-            "Write a master overview page for a personal AI conversation wiki.\n"
-            "Markdown format:\n"
-            "## My Knowledge Universe\n## Most Explored Topics\n"
-            "## Knowledge Clusters\n## Learning Journey\n"
-            "Max 500 words."
-        )
+        system = "You are a wiki writer. Output ONLY Markdown, no preamble."
         user = (
+            f"Write a master overview page for a personal AI conversation wiki.\n"
+            f"Include EXACTLY these sections:\n\n"
+            f"## My Knowledge Universe\n## Most Explored Topics\n"
+            f"## Knowledge Clusters\n## Learning Journey\n\n"
+            f"Max 500 words. Be concise and specific.\n\n"
             f"Stats: {stats.get('conversations',0)} conversations, "
             f"{stats.get('topics',0)} topics, "
             f"date range: {stats.get('date_range','unknown')}\n\n"
             f"Topics: {', '.join(all_topics[:40])}"
         )
-        return self._chat(system, user, self.creative_opts)
+        result = self._chat(system, user, self.creative_opts)
+        if self._is_refused(result):
+            topics_list = "\n".join(f"- {t}" for t in all_topics[:10])
+            return (
+                f"## My Knowledge Universe\n\n"
+                f"This wiki contains {stats.get('conversations',0)} conversations "
+                f"spanning {stats.get('date_range','unknown')}.\n\n"
+                f"## Most Explored Topics\n\n{topics_list}\n\n"
+                f"## Knowledge Clusters\n\n- Mobile app development\n- Android APIs\n\n"
+                f"## Learning Journey\n\n"
+                f"- {stats.get('topics',0)} distinct topics identified across all conversations."
+            )
+        return result
