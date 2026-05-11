@@ -1,5 +1,7 @@
 import os
 import shutil
+import threading
+import uuid
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -12,44 +14,84 @@ from config.settings import settings
 router = APIRouter()
 
 # ─────────────────────────────────────────
+# In-memory job tracker (ingest jobs)
+# ─────────────────────────────────────────
+_jobs: dict = {}   # job_id → { status, saved, skipped, total, error }
+
+def _run_ingest(job_id: str, file_path: str):
+    """Run ingestion in a background thread and update _jobs"""
+    try:
+        from ingestion.ingestion_service import IngestionService
+        svc = IngestionService()
+        result = svc.ingest_file(file_path)
+        _jobs[job_id] = {
+            "status":  "done",
+            "saved":   result.get("saved", 0),
+            "skipped": result.get("skipped", 0),
+            "total":   result.get("total", 0),
+            "error":   result.get("error"),
+        }
+    except Exception as e:
+        _jobs[job_id] = {"status": "error", "error": str(e),
+                         "saved": 0, "skipped": 0, "total": 0}
+
+# ─────────────────────────────────────────
 # Stats
 # ─────────────────────────────────────────
 @router.get("/stats")
 def get_stats(db: Session = Depends(get_db)):
-    conv_count    = db.query(func.count(Conversation.id)).scalar()
-    page_count    = db.query(func.count(WikiPage.id)).scalar()
-    chunk_count   = db.query(func.count(Chunk.id)).scalar()
-    last_dream    = db.query(DreamLog).order_by(desc(DreamLog.started_at)).first()
+    conv_count  = db.query(func.count(Conversation.id)).scalar()
+    page_count  = db.query(func.count(WikiPage.id)).scalar()
+    chunk_count = db.query(func.count(Chunk.id)).scalar()
+    last_dream  = db.query(DreamLog).order_by(desc(DreamLog.started_at)).first()
     return {
-        "conversations": conv_count,
-        "wiki_pages":    page_count,
-        "chunks":        chunk_count,
-        "last_dream":    last_dream.started_at.isoformat() if last_dream else None,
+        "conversations":     conv_count,
+        "wiki_pages":        page_count,
+        "chunks":            chunk_count,
+        "last_dream":        last_dream.started_at.isoformat() if last_dream else None,
         "last_dream_status": last_dream.status if last_dream else None,
     }
 
 # ─────────────────────────────────────────
-# Ingestion
+# Ingestion  (non-blocking)
 # ─────────────────────────────────────────
 @router.post("/ingest")
 async def ingest_file(file: UploadFile = File(...)):
-    """Upload and ingest a conversation export file"""
+    """
+    Upload a conversation export file.
+    Returns immediately with a job_id.
+    Poll  GET /api/ingest/status/{job_id}  to check progress.
+    """
     allowed = {'.json', '.zip'}
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in allowed:
-        raise HTTPException(400, f"File type {ext} not supported. Use .json or .zip")
+        raise HTTPException(400, f"نوع الملف {ext} غير مدعوم. استخدم .json أو .zip")
 
     # Save uploaded file
-    dest = os.path.join(settings.uploads_path, file.filename)
     os.makedirs(settings.uploads_path, exist_ok=True)
+    # Keep original name but make it unique to avoid collisions
+    safe_name = f"{uuid.uuid4().hex[:8]}_{file.filename}"
+    dest = os.path.join(settings.uploads_path, safe_name)
     with open(dest, 'wb') as f:
         shutil.copyfileobj(file.file, f)
 
-    # Ingest
-    from ingestion.ingestion_service import IngestionService
-    svc = IngestionService()
-    result = svc.ingest_file(dest)
-    return result
+    # Launch background thread
+    job_id = uuid.uuid4().hex[:12]
+    _jobs[job_id] = {"status": "running", "saved": 0, "skipped": 0, "total": 0, "error": None}
+    t = threading.Thread(target=_run_ingest, args=(job_id, dest), daemon=True)
+    t.start()
+
+    return {"job_id": job_id, "status": "running", "filename": file.filename}
+
+
+@router.get("/ingest/status/{job_id}")
+def ingest_status(job_id: str):
+    """Poll ingestion job status"""
+    job = _jobs.get(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    return {"job_id": job_id, **job}
+
 
 # ─────────────────────────────────────────
 # Search
@@ -61,7 +103,6 @@ def search(
     limit: int = Query(10, le=50),
     db: Session = Depends(get_db)
 ):
-    """Search across all conversations and wiki pages"""
     if mode == "semantic":
         from processing.embedder import Embedder
         emb = Embedder().embed(q)
@@ -80,12 +121,12 @@ def search(
                  "type": r[2], "conversation": r[3],
                  "source": r[4], "score": round(r[5], 3)} for r in rows]
     else:
-        # Keyword search
         rows = db.query(Chunk).filter(
             Chunk.content.ilike(f"%{q}%")
         ).limit(limit).all()
         return [{"chunk_id": r.id, "content": r.content[:300],
                  "type": r.chunk_type} for r in rows]
+
 
 # ─────────────────────────────────────────
 # Wiki Pages
@@ -103,6 +144,7 @@ def list_wiki_pages(
     return [{"id": p.id, "slug": p.slug, "title": p.title,
              "type": p.page_type, "updated_at": p.updated_at.isoformat()} for p in pages]
 
+
 @router.get("/wiki/{slug:path}")
 def get_wiki_page(slug: str, db: Session = Depends(get_db)):
     page = db.query(WikiPage).filter(WikiPage.slug == slug).first()
@@ -111,6 +153,7 @@ def get_wiki_page(slug: str, db: Session = Depends(get_db)):
     return {"slug": page.slug, "title": page.title,
             "content": page.content, "type": page.page_type,
             "updated_at": page.updated_at.isoformat(), "sha": page.git_sha}
+
 
 # ─────────────────────────────────────────
 # Conversations
@@ -134,6 +177,7 @@ def list_conversations(
                    "messages_count": len(c.messages)} for c in items]
     }
 
+
 @router.get("/conversations/{conv_id}")
 def get_conversation(conv_id: int, db: Session = Depends(get_db)):
     conv = db.query(Conversation).filter(Conversation.id == conv_id).first()
@@ -146,19 +190,19 @@ def get_conversation(conv_id: int, db: Session = Depends(get_db)):
         "messages": [{"role": m.role, "content": m.content} for m in messages]
     }
 
+
 # ─────────────────────────────────────────
 # Dreaming
 # ─────────────────────────────────────────
 @router.post("/dream")
 def trigger_dream(full: bool = False):
-    """Manually trigger a dreaming cycle"""
-    import threading
     from dreaming.dream_engine import DreamEngine
     def run():
         DreamEngine().run(full=full)
     t = threading.Thread(target=run, daemon=True)
     t.start()
-    return {"status": "started", "message": "Dreaming cycle started in background"}
+    return {"status": "started", "message": "جاري تشغيل دورة الـ Dreaming في الخلفية"}
+
 
 @router.get("/dreams")
 def list_dreams(db: Session = Depends(get_db)):

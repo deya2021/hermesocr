@@ -1,6 +1,6 @@
 import os
 import json
-import hashlib
+import zipfile
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from config.database import SessionLocal
@@ -14,29 +14,30 @@ from rich.progress import track
 
 console = Console()
 
+
 class IngestionService:
     """Main service to ingest conversation files into the database"""
 
     def __init__(self):
-        self.parsers = [ChatGPTParser(), ClaudeParser()]
-        self.embedder = Embedder()
+        self.chatgpt_parser = ChatGPTParser()
+        self.claude_parser  = ClaudeParser()
+        self.embedder       = Embedder()
+
+    # ──────────────────────────────────────────────────────────
+    # Public API
+    # ──────────────────────────────────────────────────────────
 
     def ingest_file(self, file_path: str) -> dict:
-        """Ingest a single file (JSON or ZIP)"""
         console.print(f"\n📥 Ingesting: [cyan]{file_path}[/cyan]")
 
-        # Auto-detect parser
         parser = self._detect_parser(file_path)
         if not parser:
-            return {"error": f"Cannot detect format for: {file_path}"}
+            return {"error": f"لا يمكن التعرف على صيغة الملف: {os.path.basename(file_path)}"}
 
-        # Parse conversations
         conversations = parser.parse(file_path)
-        console.print(f"   Found [green]{len(conversations)}[/green] conversations")
+        console.print(f"   وجدنا [green]{len(conversations)}[/green] محادثة")
 
-        # Save to database
-        saved = 0
-        skipped = 0
+        saved = skipped = 0
         db = SessionLocal()
         try:
             for conv in track(conversations, description="   Processing..."):
@@ -49,114 +50,163 @@ class IngestionService:
         finally:
             db.close()
 
-        console.print(f"   ✅ Saved: [green]{saved}[/green]  Skipped (duplicate): [yellow]{skipped}[/yellow]")
+        console.print(
+            f"   ✅ Saved: [green]{saved}[/green]  "
+            f"Skipped (duplicate): [yellow]{skipped}[/yellow]"
+        )
         return {"saved": saved, "skipped": skipped, "total": len(conversations)}
 
     def ingest_directory(self, dir_path: str) -> dict:
-        """Ingest all JSON/ZIP files in a directory"""
         total = {"saved": 0, "skipped": 0, "total": 0}
         files = [
             os.path.join(dir_path, f)
             for f in os.listdir(dir_path)
             if f.endswith(('.json', '.zip'))
         ]
-        for file_path in files:
-            result = self.ingest_file(file_path)
+        for fp in files:
+            result = self.ingest_file(fp)
             if "error" not in result:
-                total["saved"] += result["saved"]
+                total["saved"]   += result["saved"]
                 total["skipped"] += result["skipped"]
-                total["total"] += result["total"]
+                total["total"]   += result["total"]
         return total
 
+    # ──────────────────────────────────────────────────────────
+    # Parser detection  ← FIXED
+    # ──────────────────────────────────────────────────────────
+
     def _detect_parser(self, file_path: str):
-        """Auto-detect which parser to use"""
-        data = None
-        if file_path.endswith('.json'):
+        """
+        Smart detection — handles ZIP and JSON correctly.
+
+        ZIP heuristic:
+          • Claude ZIP:   contains 'users.json' OR 'memories.json'
+          • ChatGPT ZIP:  contains 'conversations.json' (no users.json)
+
+        JSON heuristic:
+          • ChatGPT JSON: list where first item has 'mapping' key
+          • Claude JSON:  list where first item has 'chat_messages' or 'uuid'+'name'
+        """
+        ext = os.path.splitext(file_path)[1].lower()
+
+        # ── ZIP ──────────────────────────────────────────────────
+        if ext == '.zip':
+            try:
+                with zipfile.ZipFile(file_path) as z:
+                    names = z.namelist()
+                # Claude export always has users.json and memories.json
+                if 'users.json' in names or 'memories.json' in names:
+                    console.print("   [dim]Detected: Claude ZIP[/dim]")
+                    return self.claude_parser
+                # ChatGPT export: conversations.json at root, no users.json
+                if 'conversations.json' in names:
+                    console.print("   [dim]Detected: ChatGPT ZIP[/dim]")
+                    return self.chatgpt_parser
+            except Exception as e:
+                console.print(f"   [red]ZIP read error: {e}[/red]")
+            return None
+
+        # ── JSON ─────────────────────────────────────────────────
+        if ext == '.json':
             try:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-            except:
+            except Exception:
                 return None
 
-        for parser in self.parsers:
-            if parser.can_parse(file_path, data):
-                return parser
+            if not isinstance(data, list) or not data:
+                return None
+
+            first = data[0]
+            if not isinstance(first, dict):
+                return None
+
+            # ChatGPT: has 'mapping' (linked-list of nodes)
+            if 'mapping' in first:
+                console.print("   [dim]Detected: ChatGPT JSON[/dim]")
+                return self.chatgpt_parser
+
+            # Claude: has 'chat_messages' field
+            if 'chat_messages' in first:
+                console.print("   [dim]Detected: Claude JSON[/dim]")
+                return self.claude_parser
+
+            # Claude fallback: uuid + name (no mapping)
+            if 'uuid' in first and 'name' in first and 'mapping' not in first:
+                console.print("   [dim]Detected: Claude JSON (uuid format)[/dim]")
+                return self.claude_parser
+
         return None
 
+    # ──────────────────────────────────────────────────────────
+    # Save to DB
+    # ──────────────────────────────────────────────────────────
+
     def _save_conversation(self, db: Session, parsed: ParsedConversation) -> str:
-        """Save a parsed conversation to DB, skip if duplicate"""
-        # Check for duplicate by original_id
+        # Skip duplicates
         existing = db.query(Conversation).filter(
             Conversation.original_id == parsed.original_id,
-            Conversation.source == parsed.source
+            Conversation.source      == parsed.source
         ).first()
         if existing:
             return "skipped"
 
-        # Create conversation record
         conv = Conversation(
-            source=parsed.source,
-            title=parsed.title,
-            original_id=parsed.original_id,
-            created_at=parsed.created_at,
-            raw_file=parsed.raw_file,
-            metadata_=parsed.metadata
+            source      = parsed.source,
+            title       = parsed.title,
+            original_id = parsed.original_id,
+            created_at  = parsed.created_at,
+            raw_file    = parsed.raw_file,
+            metadata_   = parsed.metadata
         )
         db.add(conv)
-        db.flush()  # get conv.id
+        db.flush()
 
-        # Save messages
         for msg in parsed.messages:
-            message = Message(
-                conversation_id=conv.id,
-                role=msg.role,
-                content=msg.content,
-                created_at=msg.created_at,
-                order_index=msg.order_index
-            )
-            db.add(message)
+            db.add(Message(
+                conversation_id = conv.id,
+                role            = msg.role,
+                content         = msg.content,
+                created_at      = msg.created_at,
+                order_index     = msg.order_index
+            ))
 
-        # Create chunks + embeddings
         self._create_chunks(db, conv, parsed)
-
         return "saved"
 
     def _create_chunks(self, db: Session, conv: Conversation, parsed: ParsedConversation):
-        """Split conversation into chunks and embed them"""
-        # Pair user questions with assistant answers
+        """
+        Create Q&A pair chunks (or single-message chunks) with embeddings.
+        Embeddings are generated one-by-one (Ollama is a local serial service).
+        """
         messages = parsed.messages
         i = 0
         while i < len(messages):
             msg = messages[i]
 
-            if msg.role == 'user' and i + 1 < len(messages) and messages[i+1].role == 'assistant':
-                # Q&A pair chunk
-                q = msg.content
-                a = messages[i+1].content
-                content = f"Q: {q}\n\nA: {a}"
+            # Q&A pair
+            if (msg.role == 'user'
+                    and i + 1 < len(messages)
+                    and messages[i + 1].role == 'assistant'):
+                q = msg.content[:1500]
+                a = messages[i + 1].content[:1500]
+                content    = f"Q: {q}\n\nA: {a}"
                 chunk_type = "qa_pair"
                 i += 2
             else:
-                content = msg.content
+                content    = msg.content[:3000]
                 chunk_type = msg.role
                 i += 1
 
-            # Skip very short chunks
             if len(content) < 50:
                 continue
 
-            # Truncate very long chunks
-            if len(content) > 3000:
-                content = content[:3000]
-
-            # Generate embedding
             embedding = self.embedder.embed(content)
 
-            chunk = Chunk(
-                conversation_id=conv.id,
-                content=content,
-                embedding=embedding,
-                chunk_type=chunk_type,
-                topics=[]
-            )
-            db.add(chunk)
+            db.add(Chunk(
+                conversation_id = conv.id,
+                content         = content,
+                embedding       = embedding,
+                chunk_type      = chunk_type,
+                topics          = []
+            ))

@@ -15,12 +15,10 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
 
-  /* Layout */
   .layout { display: flex; min-height: 100vh; }
   .sidebar { width: 260px; background: var(--bg2); border-left: 1px solid var(--border); padding: 20px 0; position: fixed; height: 100vh; overflow-y: auto; right: 0; }
   .main { margin-right: 260px; padding: 30px; flex: 1; }
 
-  /* Sidebar */
   .logo { padding: 0 20px 20px; border-bottom: 1px solid var(--border); }
   .logo h1 { font-size: 18px; color: var(--accent2); }
   .logo p { font-size: 12px; color: var(--text2); margin-top: 4px; }
@@ -32,12 +30,10 @@
   .stat-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px; }
   .stat-val { color: var(--accent2); font-weight: bold; }
 
-  /* Header */
   .page-header { margin-bottom: 28px; }
   .page-header h2 { font-size: 24px; color: var(--text); }
   .page-header p { color: var(--text2); font-size: 14px; margin-top: 6px; }
 
-  /* Search */
   .search-box { display: flex; gap: 10px; margin-bottom: 30px; }
   .search-input { flex: 1; padding: 12px 16px; background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 15px; outline: none; transition: border-color 0.2s; }
   .search-input:focus { border-color: var(--accent); }
@@ -49,33 +45,40 @@
   .btn-outline:hover { border-color: var(--accent2); color: var(--accent2); opacity: 1; }
   .btn-dream { background: linear-gradient(135deg, #7c3aed, #c084fc); }
 
-  /* Cards */
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
   .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 18px; transition: border-color 0.2s; cursor: pointer; }
   .card:hover { border-color: var(--accent2); }
   .card-title { font-size: 15px; font-weight: 600; margin-bottom: 6px; color: var(--text); }
-  .card-meta { font-size: 12px; color: var(--text2); margin-bottom: 10px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .card-meta { font-size: 12px; color: var(--text2); margin-bottom: 10px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
   .card-content { font-size: 13px; color: var(--text2); line-height: 1.6; }
   .badge { padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
   .badge-chatgpt { background: #1a4731; color: var(--green); }
-  .badge-claude { background: #2d1f3d; color: var(--dream); }
-  .badge-topic { background: #1c2a3d; color: var(--blue); }
-  .badge-dream { background: #2d1f3d; color: var(--dream); }
-  .badge-source { background: #2a2416; color: var(--yellow); }
+  .badge-claude  { background: #2d1f3d; color: var(--dream); }
+  .badge-gemini  { background: #1c2a3d; color: var(--blue); }
+  .badge-topic   { background: #1c2a3d; color: var(--blue); }
+  .badge-dream   { background: #2d1f3d; color: var(--dream); }
+  .badge-source  { background: #2a2416; color: var(--yellow); }
+  .badge-index   { background: #1a2a1a; color: var(--green); }
   .score { font-size: 12px; color: var(--accent2); font-weight: bold; }
 
-  /* Upload */
+  /* ── Upload ─────────────────────────────── */
   .upload-zone { border: 2px dashed var(--border); border-radius: 12px; padding: 50px; text-align: center; cursor: pointer; transition: all 0.2s; background: var(--bg2); }
   .upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: rgba(124,58,237,0.05); }
-  .upload-zone .icon { font-size: 48px; margin-bottom: 16px; }
+  .upload-zone .uicon { font-size: 48px; margin-bottom: 16px; }
   .upload-zone h3 { font-size: 18px; margin-bottom: 8px; }
-  .upload-zone p { color: var(--text2); font-size: 14px; }
+  .upload-zone p  { color: var(--text2); font-size: 14px; }
   #fileInput { display: none; }
-  .upload-result { margin-top: 20px; padding: 16px; border-radius: 8px; display: none; }
-  .upload-result.success { background: #1a4731; border: 1px solid var(--green); }
-  .upload-result.error { background: #3d1f1f; border: 1px solid var(--red); }
 
-  /* Wiki page viewer */
+  /* progress bar */
+  .progress-wrap { margin-top: 20px; background: var(--bg3); border-radius: 8px; border: 1px solid var(--border); padding: 20px; display: none; }
+  .progress-bar-bg { background: var(--bg3); border: 1px solid var(--border); border-radius: 20px; height: 10px; margin: 12px 0; overflow: hidden; }
+  .progress-bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--dream)); border-radius: 20px; transition: width 0.5s; width: 0%; }
+  .progress-status { font-size: 13px; color: var(--text2); }
+  .progress-result { margin-top: 12px; font-size: 14px; display: none; }
+  .progress-result.ok  { color: var(--green); }
+  .progress-result.err { color: var(--red); }
+
+  /* ── Wiki viewer ────────────────────────── */
   .wiki-viewer { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 28px; }
   .wiki-viewer h1, .wiki-viewer h2, .wiki-viewer h3 { color: var(--text); margin: 16px 0 8px; }
   .wiki-viewer p { color: var(--text2); line-height: 1.7; margin-bottom: 12px; }
@@ -83,36 +86,32 @@
   .wiki-viewer li { color: var(--text2); line-height: 1.6; margin-bottom: 4px; }
   .wiki-viewer blockquote { border-right: 3px solid var(--yellow); padding: 8px 14px; background: #2a2416; border-radius: 4px; margin: 12px 0; }
   .wiki-viewer code { background: var(--bg3); padding: 2px 6px; border-radius: 4px; font-size: 13px; color: var(--accent2); }
-  .wiki-viewer pre { background: var(--bg3); padding: 16px; border-radius: 8px; overflow-x: auto; margin: 12px 0; }
+  .wiki-viewer pre  { background: var(--bg3); padding: 16px; border-radius: 8px; overflow-x: auto; margin: 12px 0; }
   .wiki-meta { display: flex; gap: 14px; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; align-items: center; }
 
-  /* Dream panel */
+  /* ── Dream panel ────────────────────────── */
   .dream-panel { background: linear-gradient(135deg, rgba(124,58,237,0.1), rgba(192,132,252,0.05)); border: 1px solid rgba(124,58,237,0.3); border-radius: 12px; padding: 24px; margin-bottom: 28px; }
   .dream-panel h3 { color: var(--dream); font-size: 16px; margin-bottom: 12px; }
   .dream-log { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
   .dream-item { background: var(--bg3); border-radius: 6px; padding: 8px 12px; font-size: 12px; color: var(--text2); border: 1px solid var(--border); }
-  .dream-item .status-done { color: var(--green); }
-  .dream-item .status-running { color: var(--yellow); }
-  .dream-item .status-failed { color: var(--red); }
 
-  /* Tab system */
-  .tabs { display: flex; gap: 4px; margin-bottom: 24px; border-bottom: 1px solid var(--border); padding-bottom: 0; }
+  /* ── Tabs ───────────────────────────────── */
+  .tabs { display: flex; gap: 4px; margin-bottom: 24px; border-bottom: 1px solid var(--border); }
   .tab { padding: 10px 18px; font-size: 14px; color: var(--text2); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 0.2s; }
   .tab.active { color: var(--accent2); border-bottom-color: var(--accent); }
   .tab-content { display: none; }
   .tab-content.active { display: block; }
 
-  /* Spinner */
+  /* ── Spinner ────────────────────────────── */
   .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: middle; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* Toast */
+  /* ── Toast ──────────────────────────────── */
   .toast { position: fixed; bottom: 24px; left: 24px; padding: 14px 20px; border-radius: 8px; font-size: 14px; z-index: 1000; display: none; animation: fadeIn 0.3s; }
   .toast.success { background: #1a4731; border: 1px solid var(--green); color: var(--green); }
-  .toast.error { background: #3d1f1f; border: 1px solid var(--red); color: var(--red); }
-  @keyframes fadeIn { from { opacity:0; transform: translateY(10px); } to { opacity:1; transform: translateY(0); } }
+  .toast.error   { background: #3d1f1f; border: 1px solid var(--red);   color: var(--red); }
+  @keyframes fadeIn { from { opacity:0; transform: translateY(10px); } to { opacity:1; } }
 
-  /* Responsive */
   @media (max-width: 768px) {
     .sidebar { display: none; }
     .main { margin-right: 0; padding: 16px; }
@@ -122,29 +121,29 @@
 <body>
 <div class="layout">
 
-  <!-- Sidebar -->
+  <!-- ═══════════════ SIDEBAR ═══════════════ -->
   <div class="sidebar">
     <div class="logo">
       <h1>🧠 Memory Wiki</h1>
       <p>ذاكرتك المعرفية التراكمية</p>
     </div>
-    <div class="stats-box" id="statsBox">
-      <div class="stat-row"><span>محادثات</span><span class="stat-val" id="statConvs">—</span></div>
+    <div class="stats-box">
+      <div class="stat-row"><span>محادثات</span>   <span class="stat-val" id="statConvs">—</span></div>
       <div class="stat-row"><span>صفحات Wiki</span><span class="stat-val" id="statPages">—</span></div>
-      <div class="stat-row"><span>Chunks</span><span class="stat-val" id="statChunks">—</span></div>
-      <div class="stat-row"><span>آخر Dream</span><span class="stat-val" id="statDream" style="font-size:11px">—</span></div>
+      <div class="stat-row"><span>Chunks</span>    <span class="stat-val" id="statChunks">—</span></div>
+      <div class="stat-row"><span>آخر Dream</span> <span class="stat-val" id="statDream" style="font-size:11px">—</span></div>
     </div>
     <nav class="nav">
-      <div class="nav-item active" onclick="showSection('home')" id="nav-home"><span class="icon">🏠</span> الرئيسية</div>
-      <div class="nav-item" onclick="showSection('search')" id="nav-search"><span class="icon">🔍</span> البحث</div>
-      <div class="nav-item" onclick="showSection('wiki')" id="nav-wiki"><span class="icon">📚</span> الـ Wiki</div>
-      <div class="nav-item" onclick="showSection('conversations')" id="nav-conversations"><span class="icon">💬</span> المحادثات</div>
-      <div class="nav-item" onclick="showSection('upload')" id="nav-upload"><span class="icon">📥</span> استيراد</div>
-      <div class="nav-item" onclick="showSection('dream')" id="nav-dream"><span class="icon">🌙</span> Dreaming</div>
+      <div class="nav-item active" onclick="showSection('home')"          id="nav-home">         <span class="icon">🏠</span> الرئيسية</div>
+      <div class="nav-item"        onclick="showSection('search')"        id="nav-search">       <span class="icon">🔍</span> البحث</div>
+      <div class="nav-item"        onclick="showSection('wiki')"          id="nav-wiki">         <span class="icon">📚</span> الـ Wiki</div>
+      <div class="nav-item"        onclick="showSection('conversations')" id="nav-conversations"><span class="icon">💬</span> المحادثات</div>
+      <div class="nav-item"        onclick="showSection('upload')"        id="nav-upload">       <span class="icon">📥</span> استيراد</div>
+      <div class="nav-item"        onclick="showSection('dream')"         id="nav-dream">        <span class="icon">🌙</span> Dreaming</div>
     </nav>
   </div>
 
-  <!-- Main Content -->
+  <!-- ═══════════════ MAIN ═══════════════════ -->
   <div class="main">
 
     <!-- HOME -->
@@ -157,16 +156,12 @@
         <h3>🌙 آخر عملية Dreaming</h3>
         <div id="lastDreamSummary" style="color:var(--text2);font-size:14px">جاري التحميل...</div>
         <div style="margin-top:14px;display:flex;gap:10px">
-          <button class="btn btn-dream btn-sm" onclick="triggerDream(false)">▶ تشغيل Dream الآن</button>
+          <button class="btn btn-dream btn-sm" onclick="triggerDream(false)">▶ Dream الآن</button>
           <button class="btn btn-outline btn-sm" onclick="triggerDream(true)">🔄 Dream كامل</button>
         </div>
       </div>
-      <div style="margin-bottom:20px">
-        <h3 style="margin-bottom:14px;color:var(--text2)">📖 آخر صفحات Wiki</h3>
-        <div class="grid" id="recentPages">
-          <div style="color:var(--text2);font-size:14px">جاري التحميل...</div>
-        </div>
-      </div>
+      <h3 style="margin-bottom:14px;color:var(--text2);font-size:15px">📖 آخر صفحات Wiki</h3>
+      <div class="grid" id="recentPages"><div style="color:var(--text2)">جاري التحميل...</div></div>
     </div>
 
     <!-- SEARCH -->
@@ -176,7 +171,9 @@
         <p>ابحث في كل محادثاتك بالمعنى لا بالكلمات فقط</p>
       </div>
       <div class="search-box">
-        <input type="text" class="search-input" id="searchInput" placeholder="ابحث عن أي شيء..." onkeydown="if(event.key==='Enter') doSearch()">
+        <input type="text" class="search-input" id="searchInput"
+               placeholder="ابحث عن أي شيء..."
+               onkeydown="if(event.key==='Enter') doSearch()">
         <select class="search-mode" id="searchMode">
           <option value="semantic">دلالي 🧠</option>
           <option value="keyword">كلمات مفتاحية</option>
@@ -193,10 +190,10 @@
         <p>صفحات Wiki المُولَّدة تلقائياً من محادثاتك</p>
       </div>
       <div class="tabs">
-        <div class="tab active" onclick="loadWiki('topic')" id="wtab-topic">📖 المواضيع</div>
-        <div class="tab" onclick="loadWiki('dream')" id="wtab-dream">🌙 Dreams</div>
-        <div class="tab" onclick="loadWiki('source')" id="wtab-source">📂 المصادر</div>
-        <div class="tab" onclick="loadWiki('index')" id="wtab-index">🗂 الفهرس</div>
+        <div class="tab active" onclick="loadWiki('topic')"  id="wtab-topic">📖 المواضيع</div>
+        <div class="tab"        onclick="loadWiki('dream')"  id="wtab-dream">🌙 Dreams</div>
+        <div class="tab"        onclick="loadWiki('source')" id="wtab-source">📂 المصادر</div>
+        <div class="tab"        onclick="loadWiki('index')"  id="wtab-index">🗂 الفهرس</div>
       </div>
       <div id="wikiList" class="grid"></div>
       <div id="wikiViewer" style="display:none">
@@ -211,7 +208,7 @@
         <h2>💬 المحادثات</h2>
         <p>كل محادثاتك المستوردة</p>
       </div>
-      <div style="display:flex;gap:10px;margin-bottom:20px">
+      <div style="margin-bottom:20px">
         <select class="search-mode" id="convSource" onchange="loadConversations()">
           <option value="">كل المصادر</option>
           <option value="chatgpt">ChatGPT</option>
@@ -232,21 +229,34 @@
         <h2>📥 استيراد المحادثات</h2>
         <p>ارفع ملفات Export من ChatGPT أو Claude</p>
       </div>
-      <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()"
+
+      <div class="upload-zone" id="uploadZone"
+           onclick="document.getElementById('fileInput').click()"
            ondragover="event.preventDefault();this.classList.add('drag')"
            ondragleave="this.classList.remove('drag')"
            ondrop="handleDrop(event)">
-        <div class="icon">📁</div>
+        <div class="uicon">📁</div>
         <h3>اسحب الملف هنا أو اضغط للاختيار</h3>
-        <p>يدعم: conversations.json من ChatGPT · claude_conversations.json · ZIP</p>
+        <p>يدعم: ZIP من ChatGPT · JSON أو ZIP من Claude</p>
         <input type="file" id="fileInput" accept=".json,.zip" onchange="uploadFile(this.files[0])">
       </div>
-      <div class="upload-result" id="uploadResult"></div>
-      <div style="margin-top:30px;padding:20px;background:var(--bg2);border-radius:8px;border:1px solid var(--border)">
+
+      <!-- Progress section -->
+      <div class="progress-wrap" id="progressWrap">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <span style="font-size:14px;font-weight:600" id="progressTitle">جاري الرفع...</span>
+          <span style="font-size:12px;color:var(--text2)" id="progressPct">0%</span>
+        </div>
+        <div class="progress-bar-bg"><div class="progress-bar-fill" id="progressBar"></div></div>
+        <div class="progress-status" id="progressStatus">جاري رفع الملف...</div>
+        <div class="progress-result" id="progressResult"></div>
+      </div>
+
+      <div style="margin-top:24px;padding:20px;background:var(--bg2);border-radius:8px;border:1px solid var(--border)">
         <h3 style="margin-bottom:12px;font-size:15px">📖 كيف تصدّر محادثاتك؟</h3>
-        <div style="color:var(--text2);font-size:14px;line-height:1.8">
+        <div style="color:var(--text2);font-size:14px;line-height:2">
           <b style="color:var(--text)">ChatGPT:</b> Settings → Data controls → Export data → ستصلك ZIP على الإيميل<br>
-          <b style="color:var(--text)">Claude:</b> Settings → Privacy → Export conversations → JSON<br>
+          <b style="color:var(--text)">Claude:</b> Settings → Privacy → Export conversations → ZIP أو JSON<br>
           <b style="color:var(--text)">Gemini:</b> Google Takeout → اختر Gemini Apps
         </div>
       </div>
@@ -256,204 +266,176 @@
     <div id="section-dream" class="tab-content">
       <div class="page-header">
         <h2>🌙 Dreaming Engine</h2>
-        <p>محرك التوطيد الليلي للمعرفة — يعمل كل يوم الساعة 2:00 AM</p>
+        <p>محرك التوطيد الليلي للمعرفة — يعمل تلقائياً كل يوم الساعة 2:00 AM</p>
       </div>
       <div class="dream-panel">
         <h3>⚙️ تشغيل يدوي</h3>
-        <p style="color:var(--text2);font-size:14px;margin-bottom:14px">يمر بـ 6 مراحل: DIGEST → CLUSTER → WRITE → CONNECT → COMPRESS → INDEX</p>
+        <p style="color:var(--text2);font-size:14px;margin-bottom:14px">
+          6 مراحل: DIGEST → CLUSTER → WRITE → CONNECT → COMPRESS → INDEX
+        </p>
         <div style="display:flex;gap:10px">
-          <button class="btn btn-dream" onclick="triggerDream(false)">▶ Dream تدريجي (الجديد فقط)</button>
-          <button class="btn btn-outline" onclick="triggerDream(true)">🔄 Dream كامل (إعادة معالجة كل شيء)</button>
+          <button class="btn btn-dream" onclick="triggerDream(false)">▶ Dream تدريجي</button>
+          <button class="btn btn-outline" onclick="triggerDream(true)">🔄 Dream كامل</button>
         </div>
       </div>
-      <h3 style="margin-bottom:14px;color:var(--text2)">📋 سجل Dream</h3>
+      <h3 style="margin-bottom:14px;color:var(--text2);font-size:15px">📋 سجل Dream</h3>
       <div id="dreamLog"></div>
     </div>
 
-  </div>
-</div>
+  </div><!-- /main -->
+</div><!-- /layout -->
 
 <div class="toast" id="toast"></div>
 
 <script>
 const API = '/api';
 
-// ─────────────────────────────────────────
+// ══════════════════════════════════════════════
 // Navigation
-// ─────────────────────────────────────────
+// ══════════════════════════════════════════════
 function showSection(name) {
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(el  => el.classList.remove('active'));
   document.getElementById('section-' + name).classList.add('active');
-  document.getElementById('nav-' + name).classList.add('active');
-  
-  if (name === 'wiki') loadWiki('topic');
+  document.getElementById('nav-'     + name).classList.add('active');
+  if (name === 'wiki')          loadWiki('topic');
   if (name === 'conversations') loadConversations();
-  if (name === 'dream') loadDreamLog();
-  if (name === 'home') loadHome();
+  if (name === 'dream')         loadDreamLog();
+  if (name === 'home')          loadHome();
 }
 
-// ─────────────────────────────────────────
+// ══════════════════════════════════════════════
 // Stats
-// ─────────────────────────────────────────
+// ══════════════════════════════════════════════
 async function loadStats() {
-  const r = await fetch(`${API}/stats`);
-  const d = await r.json();
-  document.getElementById('statConvs').textContent = d.conversations;
-  document.getElementById('statPages').textContent = d.wiki_pages;
-  document.getElementById('statChunks').textContent = d.chunks;
-  document.getElementById('statDream').textContent = d.last_dream 
-    ? new Date(d.last_dream).toLocaleDateString('ar') + ' · ' + (d.last_dream_status || '')
-    : 'لم يبدأ بعد';
+  try {
+    const d = await fetch(`${API}/stats`).then(r => r.json());
+    document.getElementById('statConvs').textContent  = d.conversations;
+    document.getElementById('statPages').textContent  = d.wiki_pages;
+    document.getElementById('statChunks').textContent = d.chunks;
+    document.getElementById('statDream').textContent  = d.last_dream
+      ? new Date(d.last_dream).toLocaleDateString('ar') + ' · ' + (d.last_dream_status || '')
+      : 'لم يبدأ بعد';
+  } catch(e) { /* ignore */ }
 }
 
-// ─────────────────────────────────────────
+// ══════════════════════════════════════════════
 // Home
-// ─────────────────────────────────────────
+// ══════════════════════════════════════════════
 async function loadHome() {
   loadStats();
-  
-  // Last dream summary
-  const dr = await fetch(`${API}/dreams`);
-  const dreams = await dr.json();
-  const lastDream = dreams[0];
-  if (lastDream) {
-    const statusColor = lastDream.status === 'done' ? 'var(--green)' : lastDream.status === 'running' ? 'var(--yellow)' : 'var(--red)';
-    document.getElementById('lastDreamSummary').innerHTML = `
-      <span style="color:${statusColor}">● ${lastDream.status}</span>
-      &nbsp;|&nbsp; ${new Date(lastDream.started_at).toLocaleString('ar')}
-      &nbsp;|&nbsp; ${lastDream.conversations} محادثة
-      &nbsp;|&nbsp; ${lastDream.pages_created} صفحة جديدة
-      &nbsp;|&nbsp; ${lastDream.insights} insights`;
-  } else {
-    document.getElementById('lastDreamSummary').textContent = 'لم يتم تشغيل Dream بعد. ارفع محادثات ثم اضغط تشغيل.';
-  }
+  try {
+    const dreams = await fetch(`${API}/dreams`).then(r => r.json());
+    const l = dreams[0];
+    const el = document.getElementById('lastDreamSummary');
+    if (l) {
+      const c = l.status === 'done' ? 'var(--green)' : l.status === 'running' ? 'var(--yellow)' : 'var(--red)';
+      el.innerHTML = `<span style="color:${c}">● ${l.status}</span>
+        &nbsp;|&nbsp; ${new Date(l.started_at).toLocaleString('ar')}
+        &nbsp;|&nbsp; ${l.conversations} محادثة
+        &nbsp;|&nbsp; ${l.pages_created} صفحة جديدة
+        &nbsp;|&nbsp; ${l.insights} insights`;
+    } else {
+      el.textContent = 'لم يتم تشغيل Dream بعد. ارفع محادثات ثم اضغط تشغيل.';
+    }
+  } catch(e) {}
 
-  // Recent wiki pages
-  const wr = await fetch(`${API}/wiki?limit=6`);
-  const pages = await wr.json();
-  const el = document.getElementById('recentPages');
-  if (pages.length === 0) {
-    el.innerHTML = '<p style="color:var(--text2)">لا توجد صفحات بعد. استورد محادثات ثم شغّل Dream.</p>';
-    return;
-  }
-  el.innerHTML = pages.map(p => `
-    <div class="card" onclick="openWikiPage('${p.slug}')">
-      <div class="card-title">${p.title}</div>
-      <div class="card-meta">
-        <span class="badge badge-${p.type === 'dream' ? 'dream' : p.type === 'topic' ? 'topic' : 'source'}">${p.type}</span>
-        <span>${new Date(p.updated_at).toLocaleDateString('ar')}</span>
-      </div>
-    </div>`).join('');
+  try {
+    const pages = await fetch(`${API}/wiki?limit=6`).then(r => r.json());
+    const el = document.getElementById('recentPages');
+    if (!pages.length) {
+      el.innerHTML = '<p style="color:var(--text2)">لا توجد صفحات بعد. استورد محادثات ثم شغّل Dream.</p>';
+    } else {
+      el.innerHTML = pages.map(p => `
+        <div class="card" onclick="showSection('wiki');setTimeout(()=>openWikiPage('${p.slug}'),100)">
+          <div class="card-title">${p.title}</div>
+          <div class="card-meta">
+            <span class="badge badge-${p.type}">${p.type}</span>
+            <span>${new Date(p.updated_at).toLocaleDateString('ar')}</span>
+          </div>
+        </div>`).join('');
+    }
+  } catch(e) {}
 }
 
-// ─────────────────────────────────────────
+// ══════════════════════════════════════════════
 // Search
-// ─────────────────────────────────────────
+// ══════════════════════════════════════════════
 async function doSearch() {
-  const q = document.getElementById('searchInput').value.trim();
+  const q    = document.getElementById('searchInput').value.trim();
   const mode = document.getElementById('searchMode').value;
   if (!q) return;
-  
   const el = document.getElementById('searchResults');
-  el.innerHTML = '<div class="spinner"></div> جاري البحث...';
-  
-  const r = await fetch(`${API}/search?q=${encodeURIComponent(q)}&mode=${mode}&limit=15`);
-  const results = await r.json();
-  
-  if (results.length === 0) {
-    el.innerHTML = '<p style="color:var(--text2)">لا نتائج. جرّب كلمات مختلفة.</p>';
-    return;
-  }
-  
-  el.innerHTML = `<p style="color:var(--text2);margin-bottom:14px">${results.length} نتيجة</p>
-    <div class="grid">
-    ${results.map(r => `
-      <div class="card">
-        <div class="card-meta">
-          <span class="badge badge-${r.source || 'topic'}">${r.source || r.type || ''}</span>
-          <span class="score">${r.score ? (r.score * 100).toFixed(0) + '%' : ''}</span>
-        </div>
-        <div class="card-title" style="font-size:13px;font-weight:500">${r.conversation || ''}</div>
-        <div class="card-content">${r.content}</div>
-      </div>`).join('')}
-    </div>`;
+  el.innerHTML = '<span class="spinner"></span> جاري البحث...';
+  try {
+    const results = await fetch(`${API}/search?q=${encodeURIComponent(q)}&mode=${mode}&limit=15`).then(r => r.json());
+    if (!results.length) { el.innerHTML = '<p style="color:var(--text2)">لا نتائج.</p>'; return; }
+    el.innerHTML = `<p style="color:var(--text2);margin-bottom:14px">${results.length} نتيجة</p><div class="grid">`
+      + results.map(r => `
+        <div class="card">
+          <div class="card-meta">
+            <span class="badge badge-${r.source||'topic'}">${r.source||r.type||''}</span>
+            <span class="score">${r.score ? (r.score*100).toFixed(0)+'%' : ''}</span>
+          </div>
+          <div class="card-title" style="font-size:13px">${r.conversation||''}</div>
+          <div class="card-content">${r.content}</div>
+        </div>`).join('')
+      + '</div>';
+  } catch(e) { el.innerHTML = '<p style="color:var(--red)">خطأ في البحث</p>'; }
 }
 
-// ─────────────────────────────────────────
+// ══════════════════════════════════════════════
 // Wiki
-// ─────────────────────────────────────────
-let currentWikiType = 'topic';
+// ══════════════════════════════════════════════
 async function loadWiki(type) {
-  currentWikiType = type;
   document.querySelectorAll('[id^="wtab-"]').forEach(t => t.classList.remove('active'));
   document.getElementById('wtab-' + type).classList.add('active');
-  
-  document.getElementById('wikiList').style.display = 'grid';
+  document.getElementById('wikiList').style.display   = 'grid';
   document.getElementById('wikiViewer').style.display = 'none';
-  
-  const r = await fetch(`${API}/wiki?page_type=${type}&limit=100`);
-  const pages = await r.json();
+  const pages = await fetch(`${API}/wiki?page_type=${type}&limit=100`).then(r => r.json());
   const el = document.getElementById('wikiList');
-  
-  if (pages.length === 0) {
-    el.innerHTML = '<p style="color:var(--text2)">لا توجد صفحات من هذا النوع بعد.</p>';
-    return;
-  }
-  
+  if (!pages.length) { el.innerHTML = '<p style="color:var(--text2)">لا توجد صفحات من هذا النوع بعد.</p>'; return; }
   el.innerHTML = pages.map(p => `
     <div class="card" onclick="openWikiPage('${p.slug}')">
       <div class="card-title">${p.title}</div>
-      <div class="card-meta">
-        <span>${new Date(p.updated_at).toLocaleDateString('ar')}</span>
-      </div>
+      <div class="card-meta"><span>${new Date(p.updated_at).toLocaleDateString('ar')}</span></div>
     </div>`).join('');
 }
 
 async function openWikiPage(slug) {
-  document.getElementById('wikiList').style.display = 'none';
+  document.getElementById('wikiList').style.display   = 'none';
   document.getElementById('wikiViewer').style.display = 'block';
-  document.getElementById('wikiContent').innerHTML = '<div class="spinner"></div>';
-  
-  const r = await fetch(`${API}/wiki/${slug}`);
-  const page = await r.json();
-  
+  document.getElementById('wikiContent').innerHTML    = '<span class="spinner"></span>';
+  const page = await fetch(`${API}/wiki/${slug}`).then(r => r.json());
   document.getElementById('wikiContent').innerHTML = `
     <div class="wiki-meta">
       <span class="badge badge-${page.type}">${page.type}</span>
       <span style="color:var(--text2);font-size:13px">آخر تحديث: ${new Date(page.updated_at).toLocaleString('ar')}</span>
-      <span style="color:var(--text2);font-size:11px">SHA: ${page.sha || '—'}</span>
+      <span style="color:var(--text2);font-size:11px;opacity:.6">sha:${page.sha||'—'}</span>
     </div>
     <h1>${page.title}</h1>
-    <div style="margin-top:20px">${markdownToHtml(page.content)}</div>`;
+    <div style="margin-top:20px">${mdToHtml(page.content)}</div>`;
 }
 
 function closeWikiViewer() {
-  document.getElementById('wikiList').style.display = 'grid';
+  document.getElementById('wikiList').style.display   = 'grid';
   document.getElementById('wikiViewer').style.display = 'none';
 }
 
-// ─────────────────────────────────────────
+// ══════════════════════════════════════════════
 // Conversations
-// ─────────────────────────────────────────
+// ══════════════════════════════════════════════
 async function loadConversations() {
   const source = document.getElementById('convSource').value;
-  const url = `${API}/conversations?limit=50${source ? '&source=' + source : ''}`;
-  const r = await fetch(url);
-  const data = await r.json();
-  
-  document.getElementById('convList').style.display = 'grid';
+  document.getElementById('convList').style.display   = 'grid';
   document.getElementById('convViewer').style.display = 'none';
-  
+  const data = await fetch(`${API}/conversations?limit=100${source?'&source='+source:''}`).then(r=>r.json());
   const el = document.getElementById('convList');
-  if (data.items.length === 0) {
-    el.innerHTML = '<p style="color:var(--text2)">لا توجد محادثات. استورد ملفات أولاً.</p>';
-    return;
-  }
-  el.innerHTML = `<div style="grid-column:1/-1;color:var(--text2);font-size:14px;margin-bottom:8px">${data.total} محادثة</div>` +
-    data.items.map(c => `
+  if (!data.items.length) { el.innerHTML = '<p style="color:var(--text2)">لا توجد محادثات. استورد ملفات أولاً.</p>'; return; }
+  el.innerHTML = `<div style="grid-column:1/-1;color:var(--text2);font-size:14px">${data.total} محادثة</div>`
+    + data.items.map(c => `
       <div class="card" onclick="openConversation(${c.id})">
-        <div class="card-title">${c.title || 'بدون عنوان'}</div>
+        <div class="card-title">${c.title||'بدون عنوان'}</div>
         <div class="card-meta">
           <span class="badge badge-${c.source}">${c.source}</span>
           <span>${c.messages_count} رسالة</span>
@@ -463,151 +445,187 @@ async function loadConversations() {
 }
 
 async function openConversation(id) {
-  document.getElementById('convList').style.display = 'none';
+  document.getElementById('convList').style.display   = 'none';
   document.getElementById('convViewer').style.display = 'block';
-  document.getElementById('convContent').innerHTML = '<div class="spinner"></div>';
-  
-  const r = await fetch(`${API}/conversations/${id}`);
-  const conv = await r.json();
-  
-  const msgs = conv.messages.map(m => `
-    <div style="margin-bottom:16px;padding:14px;border-radius:8px;background:${m.role==='user'?'var(--bg3)':'rgba(124,58,237,0.07)'};border:1px solid ${m.role==='user'?'var(--border)':'rgba(124,58,237,0.2)'}">
-      <div style="font-size:12px;color:${m.role==='user'?'var(--blue)':'var(--dream)'};margin-bottom:8px;font-weight:bold">${m.role === 'user' ? '👤 أنت' : '🤖 AI'}</div>
-      <div style="font-size:14px;line-height:1.7;color:var(--text2)">${m.content.replace(/</g,'&lt;')}</div>
-    </div>`).join('');
-  
+  document.getElementById('convContent').innerHTML    = '<span class="spinner"></span>';
+  const conv = await fetch(`${API}/conversations/${id}`).then(r => r.json());
   document.getElementById('convContent').innerHTML = `
     <div class="wiki-meta">
       <span class="badge badge-${conv.source}">${conv.source}</span>
-      <span style="color:var(--text2);font-size:13px">${conv.created_at ? new Date(conv.created_at).toLocaleDateString('ar') : ''}</span>
+      <span style="color:var(--text2);font-size:13px">${conv.created_at?new Date(conv.created_at).toLocaleDateString('ar'):''}</span>
     </div>
-    <h1 style="margin-bottom:20px">${conv.title || 'بدون عنوان'}</h1>
-    ${msgs}`;
+    <h1 style="margin-bottom:20px">${conv.title||'بدون عنوان'}</h1>`
+    + conv.messages.map(m => `
+      <div style="margin-bottom:14px;padding:14px;border-radius:8px;
+           background:${m.role==='user'?'var(--bg3)':'rgba(124,58,237,0.07)'};
+           border:1px solid ${m.role==='user'?'var(--border)':'rgba(124,58,237,0.25)'}">
+        <div style="font-size:12px;font-weight:700;margin-bottom:8px;
+             color:${m.role==='user'?'var(--blue)':'var(--dream)'}">
+          ${m.role==='user'?'👤 أنت':'🤖 AI'}
+        </div>
+        <div style="font-size:14px;line-height:1.75;color:var(--text2);white-space:pre-wrap">${esc(m.content)}</div>
+      </div>`).join('');
 }
 
 function closeConvViewer() {
-  document.getElementById('convList').style.display = 'grid';
+  document.getElementById('convList').style.display   = 'grid';
   document.getElementById('convViewer').style.display = 'none';
 }
 
-// ─────────────────────────────────────────
-// Upload
-// ─────────────────────────────────────────
+// ══════════════════════════════════════════════
+// Upload  — non-blocking with polling
+// ══════════════════════════════════════════════
 function handleDrop(e) {
   e.preventDefault();
   document.getElementById('uploadZone').classList.remove('drag');
-  const file = e.dataTransfer.files[0];
-  if (file) uploadFile(file);
+  if (e.dataTransfer.files[0]) uploadFile(e.dataTransfer.files[0]);
 }
 
 async function uploadFile(file) {
   if (!file) return;
-  const zone = document.getElementById('uploadZone');
-  const result = document.getElementById('uploadResult');
-  
-  zone.innerHTML = `<div class="icon">⏳</div><h3>جاري الاستيراد...</h3><p>${file.name}</p><div class="spinner" style="margin-top:10px"></div>`;
-  result.style.display = 'none';
-  
+
+  // Reset UI
+  setProgress(true, 'جاري رفع الملف...', 10);
+  document.getElementById('progressResult').style.display = 'none';
+  document.getElementById('progressTitle').textContent = file.name;
+
   const fd = new FormData();
   fd.append('file', file);
-  
+  // Reset file input so same file can be re-uploaded
+  document.getElementById('fileInput').value = '';
+
+  let job_id;
   try {
-    const r = await fetch(`${API}/ingest`, { method: 'POST', body: fd });
-    const data = await r.json();
-    
-    zone.innerHTML = `<div class="icon">📁</div><h3>اسحب الملف هنا أو اضغط للاختيار</h3><p>يدعم: conversations.json من ChatGPT · claude_conversations.json · ZIP</p><input type="file" id="fileInput" accept=".json,.zip" onchange="uploadFile(this.files[0])">`;
-    
-    if (data.error) {
-      result.className = 'upload-result error';
-      result.textContent = '❌ ' + data.error;
-    } else {
-      result.className = 'upload-result success';
-      result.innerHTML = `✅ تم الاستيراد! <b>${data.saved}</b> محادثة جديدة · ${data.skipped} مكررة · الإجمالي ${data.total}`;
-      loadStats();
-      showToast(`تم استيراد ${data.saved} محادثة!`, 'success');
-    }
-    result.style.display = 'block';
+    const res = await fetch(`${API}/ingest`, { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || data.detail || 'خطأ في الرفع');
+    job_id = data.job_id;
   } catch(e) {
-    zone.innerHTML = `<div class="icon">📁</div><h3>اسحب الملف هنا أو اضغط للاختيار</h3><p>يدعم: conversations.json من ChatGPT · claude_conversations.json · ZIP</p><input type="file" id="fileInput" accept=".json,.zip" onchange="uploadFile(this.files[0])">`;
-    result.className = 'upload-result error';
-    result.textContent = '❌ خطأ في الاتصال: ' + e.message;
-    result.style.display = 'block';
+    showProgressError('❌ فشل رفع الملف: ' + e.message);
+    return;
+  }
+
+  // Poll for completion
+  setProgress(true, 'جاري معالجة المحادثات وتوليد الـ Embeddings...', 30);
+  pollJob(job_id, 0);
+}
+
+async function pollJob(job_id, tick) {
+  try {
+    const data = await fetch(`${API}/ingest/status/${job_id}`).then(r => r.json());
+
+    if (data.status === 'running') {
+      // Animate progress bar (30 → 90 over time)
+      const pct = Math.min(90, 30 + tick * 3);
+      setProgress(true, `جاري معالجة المحادثات... (chunk ${tick+1})`, pct);
+      setTimeout(() => pollJob(job_id, tick + 1), 2000);
+
+    } else if (data.status === 'done') {
+      setProgress(true, 'اكتمل الاستيراد!', 100);
+      const resultEl = document.getElementById('progressResult');
+      if (data.error) {
+        resultEl.className = 'progress-result err';
+        resultEl.textContent = '⚠️ ' + data.error;
+      } else {
+        resultEl.className = 'progress-result ok';
+        resultEl.innerHTML = `✅ تم الاستيراد بنجاح!&nbsp;&nbsp;
+          <b>${data.saved}</b> محادثة جديدة &nbsp;·&nbsp;
+          ${data.skipped} مكررة &nbsp;·&nbsp;
+          المجموع ${data.total}`;
+        loadStats();
+        showToast(`✅ تم استيراد ${data.saved} محادثة!`, 'success');
+      }
+      resultEl.style.display = 'block';
+
+    } else {
+      showProgressError('❌ خطأ: ' + (data.error || 'unknown'));
+    }
+  } catch(e) {
+    showProgressError('❌ خطأ في الاتصال: ' + e.message);
   }
 }
 
-// ─────────────────────────────────────────
+function setProgress(show, status, pct) {
+  document.getElementById('progressWrap').style.display  = show ? 'block' : 'none';
+  document.getElementById('progressStatus').textContent  = status;
+  document.getElementById('progressBar').style.width     = pct + '%';
+  document.getElementById('progressPct').textContent     = pct + '%';
+}
+
+function showProgressError(msg) {
+  setProgress(true, msg, 0);
+  document.getElementById('progressBar').style.background = 'var(--red)';
+  const r = document.getElementById('progressResult');
+  r.className = 'progress-result err';
+  r.textContent = msg;
+  r.style.display = 'block';
+}
+
+// ══════════════════════════════════════════════
 // Dream
-// ─────────────────────────────────────────
+// ══════════════════════════════════════════════
 async function triggerDream(full) {
-  showToast('🌙 بدأ Dream...' , 'success');
+  showToast('🌙 بدأ Dream في الخلفية...', 'success');
   await fetch(`${API}/dream?full=${full}`, { method: 'POST' });
-  setTimeout(() => { loadStats(); loadDreamLog(); }, 2000);
+  setTimeout(() => { loadStats(); if(document.getElementById('section-dream').classList.contains('active')) loadDreamLog(); }, 2500);
 }
 
 async function loadDreamLog() {
-  const r = await fetch(`${API}/dreams`);
-  const logs = await r.json();
+  const logs = await fetch(`${API}/dreams`).then(r => r.json());
   const el = document.getElementById('dreamLog');
-  
-  if (logs.length === 0) {
-    el.innerHTML = '<p style="color:var(--text2)">لم يتم تشغيل Dream بعد.</p>';
-    return;
-  }
-  
+  if (!logs.length) { el.innerHTML = '<p style="color:var(--text2)">لم يتم تشغيل Dream بعد.</p>'; return; }
   el.innerHTML = logs.map(l => {
-    const statusColor = l.status === 'done' ? 'green' : l.status === 'running' ? 'yellow' : 'red';
+    const c = l.status==='done'?'var(--green)':l.status==='running'?'var(--yellow)':'var(--red)';
     return `
     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:12px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <span class="status-${statusColor}" style="color:var(--${statusColor});font-weight:bold">● ${l.status}</span>
+        <span style="color:${c};font-weight:bold">● ${l.status}</span>
         <span style="color:var(--text2);font-size:12px">${new Date(l.started_at).toLocaleString('ar')}</span>
       </div>
       <div class="dream-log">
         <div class="dream-item">💬 ${l.conversations} محادثات</div>
         <div class="dream-item">📄 ${l.pages_created} صفحة جديدة</div>
-        <div class="dream-item">✏️ ${l.pages_updated} صفحة محدّثة</div>
+        <div class="dream-item">✏️ ${l.pages_updated} محدّثة</div>
         <div class="dream-item">💡 ${l.insights} insights</div>
       </div>
     </div>`}).join('');
 }
 
-// ─────────────────────────────────────────
-// Markdown renderer (simple)
-// ─────────────────────────────────────────
-function markdownToHtml(md) {
+// ══════════════════════════════════════════════
+// Helpers
+// ══════════════════════════════════════════════
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function mdToHtml(md) {
   if (!md) return '';
-  return md
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-    .replace(/^### (.+)$/gm, '<h3>$3</h3>')
-    .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
-    .replace(/\*(.+?)\*/g, '<i>$1</i>')
-    .replace(/`(.+?)`/g, '<code>$1</code>')
-    .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
-    .replace(/^- (.+)$/gm, '<li>$1</li>')
-    .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
-    .replace(/\n\n/g, '</p><p>')
-    .replace(/^(?!<[hbuildpqu])/gm, '')
-    ;
+  let h = esc(md);
+  h = h.replace(/^# (.+)$/gm,    '<h1>$1</h1>');
+  h = h.replace(/^## (.+)$/gm,   '<h2>$1</h2>');
+  h = h.replace(/^### (.+)$/gm,  '<h3>$1</h3>');
+  h = h.replace(/\*\*(.+?)\*\*/g,'<b>$1</b>');
+  h = h.replace(/\*(.+?)\*/g,    '<i>$1</i>');
+  h = h.replace(/`(.+?)`/g,      '<code>$1</code>');
+  h = h.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
+  h = h.replace(/^[-*] (.+)$/gm, '<li>$1</li>');
+  h = h.replace(/(<li>.*?<\/li>\n?)+/gs, s => '<ul>' + s + '</ul>');
+  h = h.replace(/\n{2,}/g, '</p><p>');
+  return '<p>' + h + '</p>';
 }
 
-// ─────────────────────────────────────────
-// Toast
-// ─────────────────────────────────────────
 function showToast(msg, type='success') {
   const t = document.getElementById('toast');
   t.textContent = msg;
-  t.className = 'toast ' + type;
+  t.className   = 'toast ' + type;
   t.style.display = 'block';
-  setTimeout(() => t.style.display = 'none', 3500);
+  setTimeout(() => t.style.display = 'none', 4000);
 }
 
-// ─────────────────────────────────────────
-// Init
-// ─────────────────────────────────────────
+// ══════════════════════════════════════════════
+// Boot
+// ══════════════════════════════════════════════
 loadStats();
 loadHome();
+setInterval(loadStats, 30000);   // refresh stats every 30s
 </script>
 </body>
 </html>
