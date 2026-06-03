@@ -8,6 +8,7 @@ from config.models import Conversation, Message, Chunk, SourceType
 from ingestion.base_parser import ParsedConversation
 from ingestion.chatgpt_parser import ChatGPTParser
 from ingestion.claude_parser import ClaudeParser
+from ingestion.gemini_parser import GeminiParser
 from processing.embedder import Embedder
 from rich.console import Console
 from rich.progress import track
@@ -21,6 +22,7 @@ class IngestionService:
     def __init__(self):
         self.chatgpt_parser = ChatGPTParser()
         self.claude_parser  = ClaudeParser()
+        self.gemini_parser  = GeminiParser()
         self.embedder       = Embedder()
 
     # ──────────────────────────────────────────────────────────
@@ -72,20 +74,23 @@ class IngestionService:
         return total
 
     # ──────────────────────────────────────────────────────────
-    # Parser detection  ← FIXED
+    # Parser detection
     # ──────────────────────────────────────────────────────────
 
     def _detect_parser(self, file_path: str):
         """
-        Smart detection — handles ZIP and JSON correctly.
+        Smart detection — handles ZIP and JSON for ChatGPT, Claude, and Gemini.
 
         ZIP heuristic:
           • Claude ZIP:   contains 'users.json' OR 'memories.json'
           • ChatGPT ZIP:  contains 'conversations.json' (no users.json)
+          • Gemini ZIP:   contains files with 'gemini' in name, or 'conversations/' dir
 
         JSON heuristic:
           • ChatGPT JSON: list where first item has 'mapping' key
           • Claude JSON:  list where first item has 'chat_messages' or 'uuid'+'name'
+          • Gemini JSON:  list/dict with 'createTime' + 'messages', or author='model',
+                          or top-level 'conversations' key with Gemini-style messages
         """
         ext = os.path.splitext(file_path)[1].lower()
 
@@ -94,14 +99,24 @@ class IngestionService:
             try:
                 with zipfile.ZipFile(file_path) as z:
                     names = z.namelist()
-                # Claude export always has users.json and memories.json
+
+                # Claude: always has users.json or memories.json
                 if 'users.json' in names or 'memories.json' in names:
                     console.print("   [dim]Detected: Claude ZIP[/dim]")
                     return self.claude_parser
-                # ChatGPT export: conversations.json at root, no users.json
+
+                # Gemini: file names contain 'gemini' or there's a conversations/ dir
+                name_str = ' '.join(n.lower() for n in names)
+                if ('gemini' in name_str or 'google ai' in name_str
+                        or any(n.startswith('conversations/') for n in names)):
+                    console.print("   [dim]Detected: Gemini ZIP[/dim]")
+                    return self.gemini_parser
+
+                # ChatGPT: conversations.json at root
                 if 'conversations.json' in names:
                     console.print("   [dim]Detected: ChatGPT ZIP[/dim]")
                     return self.chatgpt_parser
+
             except Exception as e:
                 console.print(f"   [red]ZIP read error: {e}[/red]")
             return None
@@ -113,6 +128,12 @@ class IngestionService:
                     data = json.load(f)
             except Exception:
                 return None
+
+            # Format C — Gemini Takeout: {"conversations": [...]}
+            if isinstance(data, dict) and "conversations" in data:
+                if self.gemini_parser._looks_like_gemini(data):
+                    console.print("   [dim]Detected: Gemini JSON (Takeout format)[/dim]")
+                    return self.gemini_parser
 
             if not isinstance(data, list) or not data:
                 return None
@@ -133,8 +154,15 @@ class IngestionService:
 
             # Claude fallback: uuid + name (no mapping)
             if 'uuid' in first and 'name' in first and 'mapping' not in first:
-                console.print("   [dim]Detected: Claude JSON (uuid format)[/dim]")
-                return self.claude_parser
+                # Extra check: not a Gemini file
+                if 'createTime' not in first:
+                    console.print("   [dim]Detected: Claude JSON (uuid format)[/dim]")
+                    return self.claude_parser
+
+            # Gemini: has 'createTime' + 'messages', or messages with author='model'
+            if self.gemini_parser._looks_like_gemini(data):
+                console.print("   [dim]Detected: Gemini JSON[/dim]")
+                return self.gemini_parser
 
         return None
 
@@ -152,12 +180,13 @@ class IngestionService:
             return "skipped"
 
         conv = Conversation(
-            source      = parsed.source,
-            title       = parsed.title,
-            original_id = parsed.original_id,
-            created_at  = parsed.created_at,
-            raw_file    = parsed.raw_file,
-            metadata_   = parsed.metadata
+            source       = parsed.source,
+            title        = parsed.title,
+            original_id  = parsed.original_id,
+            created_at   = parsed.created_at,
+            raw_file     = parsed.raw_file,
+            metadata_    = parsed.metadata,
+            is_digested  = False,
         )
         db.add(conv)
         db.flush()

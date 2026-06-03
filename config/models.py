@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Float, JSON, ForeignKey, Enum
+from sqlalchemy import Column, Integer, String, Text, DateTime, Float, JSON, ForeignKey, Enum, Boolean
 from sqlalchemy.orm import relationship
 from pgvector.sqlalchemy import Vector
 from datetime import datetime
@@ -24,6 +24,7 @@ class Conversation(Base):
     imported_at = Column(DateTime, default=datetime.utcnow)
     raw_file = Column(String(500))             # مسار الملف الأصلي
     metadata_ = Column("metadata", JSON, default={})
+    is_digested = Column(Boolean, default=False, nullable=False)  # تم معالجته في Dream أم لا
     
     messages = relationship("Message", back_populates="conversation", cascade="all, delete")
     chunks = relationship("Chunk", back_populates="conversation", cascade="all, delete")
@@ -84,3 +85,18 @@ class DreamLog(Base):
     insights_found = Column(Integer, default=0)
     status = Column(String(20), default="running")  # running / done / failed
     summary = Column(Text)
+
+
+class IngestJob(Base):
+    """جدول تتبع مهام الاستيراد — يحل محل _jobs في الذاكرة"""
+    __tablename__ = "ingest_jobs"
+
+    id = Column(String(12), primary_key=True)       # job_id hex
+    status = Column(String(20), default="running")  # running / done / error
+    filename = Column(String(500))
+    saved = Column(Integer, default=0)
+    skipped = Column(Integer, default=0)
+    total = Column(Integer, default=0)
+    error = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    finished_at = Column(DateTime)

@@ -69,6 +69,8 @@ class DreamEngine:
                         log.pages_created += 1
                     else:
                         log.pages_updated += 1
+                    # تعليم المحادثة كمعالَجة
+                    conv.is_digested = True
                     db.commit()
                 except Exception as e:
                     console.print(f"  [red]⚠ digest error: {e}[/red]")
@@ -161,25 +163,10 @@ class DreamEngine:
     # ──────────────────────────────────────────────────────────
 
     def _get_unprocessed(self, db: Session, full: bool) -> List[Conversation]:
-        """Return conversations that have no source wiki page yet."""
-        if full:
-            return (db.query(Conversation)
-                      .order_by(Conversation.created_at)
-                      .limit(self.MAX_CONVS_PER_RUN)
-                      .all())
-
-        # Find conv IDs already digested (stored in source_chunks of source pages)
-        done_ids: set = set()
-        source_pages = db.query(WikiPage.source_chunks).filter(
-            WikiPage.page_type == "source"
-        ).all()
-        for row in source_pages:
-            if row[0]:
-                done_ids.update(row[0])
-
+        """Return conversations not yet digested using is_digested flag."""
         q = db.query(Conversation).order_by(Conversation.created_at)
-        if done_ids:
-            q = q.filter(~Conversation.id.in_(done_ids))
+        if not full:
+            q = q.filter(Conversation.is_digested == False)
         return q.limit(self.MAX_CONVS_PER_RUN).all()
 
     def _digest_one(self, db: Session, conv: Conversation) -> str:

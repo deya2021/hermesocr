@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Memory Wiki — ذاكرتي المعرفية</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧠</text></svg>">
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <style>
   :root {
     --bg: #0d1117; --bg2: #161b22; --bg3: #21262d;
@@ -16,8 +18,12 @@
   body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
 
   .layout { display: flex; min-height: 100vh; }
-  .sidebar { width: 260px; background: var(--bg2); border-left: 1px solid var(--border); padding: 20px 0; position: fixed; height: 100vh; overflow-y: auto; right: 0; }
-  .main { margin-right: 260px; padding: 30px; flex: 1; }
+  .sidebar { width: 260px; background: var(--bg2); border-left: 1px solid var(--border); padding: 20px 0; position: fixed; height: 100vh; overflow-y: auto; right: 0; z-index: 200; transition: transform 0.3s; }
+  .main { margin-right: 260px; padding: 30px; flex: 1; min-width: 0; }
+
+  /* ── Mobile hamburger ─── */
+  .hamburger { display: none; position: fixed; top: 14px; right: 14px; z-index: 300; background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; cursor: pointer; font-size: 18px; }
+  .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 190; }
 
   .logo { padding: 0 20px 20px; border-bottom: 1px solid var(--border); }
   .logo h1 { font-size: 18px; color: var(--accent2); }
@@ -30,16 +36,22 @@
   .stat-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px; }
   .stat-val { color: var(--accent2); font-weight: bold; }
 
+  /* ── Dream running indicator ── */
+  .dream-running-badge { display: none; margin: 0 16px 12px; padding: 8px 12px; background: rgba(192,132,252,0.1); border: 1px solid rgba(192,132,252,0.4); border-radius: 8px; font-size: 12px; color: var(--dream); text-align: center; }
+  .dream-running-badge .pulse { display: inline-block; width: 8px; height: 8px; background: var(--dream); border-radius: 50%; margin-left: 6px; animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.4; transform:scale(0.8); } }
+
   .page-header { margin-bottom: 28px; }
   .page-header h2 { font-size: 24px; color: var(--text); }
   .page-header p { color: var(--text2); font-size: 14px; margin-top: 6px; }
 
   .search-box { display: flex; gap: 10px; margin-bottom: 30px; }
-  .search-input { flex: 1; padding: 12px 16px; background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 15px; outline: none; transition: border-color 0.2s; }
+  .search-input { flex: 1; padding: 12px 16px; background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 15px; outline: none; transition: border-color 0.2s; min-width: 0; }
   .search-input:focus { border-color: var(--accent); }
   .search-mode { padding: 12px 16px; background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px; cursor: pointer; }
   .btn { padding: 12px 20px; background: var(--accent); border: none; border-radius: 8px; color: white; font-size: 14px; cursor: pointer; font-weight: 600; transition: opacity 0.2s; }
   .btn:hover { opacity: 0.85; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .btn-sm { padding: 7px 14px; font-size: 13px; }
   .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text2); }
   .btn-outline:hover { border-color: var(--accent2); color: var(--accent2); opacity: 1; }
@@ -52,14 +64,20 @@
   .card-meta { font-size: 12px; color: var(--text2); margin-bottom: 10px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
   .card-content { font-size: 13px; color: var(--text2); line-height: 1.6; }
   .badge { padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
-  .badge-chatgpt { background: #1a4731; color: var(--green); }
-  .badge-claude  { background: #2d1f3d; color: var(--dream); }
-  .badge-gemini  { background: #1c2a3d; color: var(--blue); }
-  .badge-topic   { background: #1c2a3d; color: var(--blue); }
-  .badge-dream   { background: #2d1f3d; color: var(--dream); }
-  .badge-source  { background: #2a2416; color: var(--yellow); }
-  .badge-index   { background: #1a2a1a; color: var(--green); }
+  .badge-chatgpt  { background: #1a4731; color: var(--green); }
+  .badge-claude   { background: #2d1f3d; color: var(--dream); }
+  .badge-gemini   { background: #1c2a3d; color: var(--blue); }
+  .badge-topic    { background: #1c2a3d; color: var(--blue); }
+  .badge-dream    { background: #2d1f3d; color: var(--dream); }
+  .badge-source   { background: #2a2416; color: var(--yellow); }
+  .badge-index    { background: #1a2a1a; color: var(--green); }
+  .badge-digested { background: #1a2a1a; color: var(--green); font-size: 10px; }
+  .badge-pending  { background: #2a2010; color: var(--yellow); font-size: 10px; }
   .score { font-size: 12px; color: var(--accent2); font-weight: bold; }
+
+  /* ── Pagination ── */
+  .pagination { display: flex; align-items: center; gap: 10px; margin-top: 20px; justify-content: center; }
+  .pagination span { color: var(--text2); font-size: 13px; }
 
   /* ── Upload ─────────────────────────────── */
   .upload-zone { border: 2px dashed var(--border); border-radius: 12px; padding: 50px; text-align: center; cursor: pointer; transition: all 0.2s; background: var(--bg2); }
@@ -96,7 +114,7 @@
   .dream-item { background: var(--bg3); border-radius: 6px; padding: 8px 12px; font-size: 12px; color: var(--text2); border: 1px solid var(--border); }
 
   /* ── Tabs ───────────────────────────────── */
-  .tabs { display: flex; gap: 4px; margin-bottom: 24px; border-bottom: 1px solid var(--border); }
+  .tabs { display: flex; gap: 4px; margin-bottom: 24px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
   .tab { padding: 10px 18px; font-size: 14px; color: var(--text2); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 0.2s; }
   .tab.active { color: var(--accent2); border-bottom-color: var(--accent); }
   .tab-content { display: none; }
@@ -107,22 +125,39 @@
   @keyframes spin { to { transform: rotate(360deg); } }
 
   /* ── Toast ──────────────────────────────── */
-  .toast { position: fixed; bottom: 24px; left: 24px; padding: 14px 20px; border-radius: 8px; font-size: 14px; z-index: 1000; display: none; animation: fadeIn 0.3s; }
+  .toast { position: fixed; bottom: 24px; left: 24px; padding: 14px 20px; border-radius: 8px; font-size: 14px; z-index: 1000; display: none; animation: fadeIn 0.3s; max-width: 320px; }
   .toast.success { background: #1a4731; border: 1px solid var(--green); color: var(--green); }
   .toast.error   { background: #3d1f1f; border: 1px solid var(--red);   color: var(--red); }
   @keyframes fadeIn { from { opacity:0; transform: translateY(10px); } to { opacity:1; } }
 
+  /* ── Dream log entry ── */
+  .dream-log-entry { background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:16px; margin-bottom:12px; }
+  .dream-log-entry.running { border-color: rgba(192,132,252,0.5); }
+  .dream-summary { margin-top: 10px; font-size: 12px; color: var(--text2); background: var(--bg3); padding: 8px 12px; border-radius: 6px; line-height: 1.6; }
+
+  /* ── Mobile ─────────────────────────────── */
   @media (max-width: 768px) {
-    .sidebar { display: none; }
-    .main { margin-right: 0; padding: 16px; }
+    .hamburger { display: block; }
+    .sidebar { transform: translateX(100%); }
+    .sidebar.open { transform: translateX(0); }
+    .sidebar-overlay.open { display: block; }
+    .main { margin-right: 0; padding: 16px; padding-top: 56px; }
+    .grid { grid-template-columns: 1fr; }
+    .search-box { flex-wrap: wrap; }
+    .search-input { min-width: 100%; }
   }
 </style>
 </head>
 <body>
+
+<!-- Mobile hamburger -->
+<button class="hamburger" onclick="toggleSidebar()" id="hamburger">☰</button>
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
 <div class="layout">
 
   <!-- ═══════════════ SIDEBAR ═══════════════ -->
-  <div class="sidebar">
+  <div class="sidebar" id="sidebar">
     <div class="logo">
       <h1>🧠 Memory Wiki</h1>
       <p>ذاكرتك المعرفية التراكمية</p>
@@ -132,6 +167,10 @@
       <div class="stat-row"><span>صفحات Wiki</span><span class="stat-val" id="statPages">—</span></div>
       <div class="stat-row"><span>Chunks</span>    <span class="stat-val" id="statChunks">—</span></div>
       <div class="stat-row"><span>آخر Dream</span> <span class="stat-val" id="statDream" style="font-size:11px">—</span></div>
+    </div>
+    <!-- Dream running indicator -->
+    <div class="dream-running-badge" id="dreamRunningBadge">
+      <span class="pulse"></span> Dream يعمل الآن...
     </div>
     <nav class="nav">
       <div class="nav-item active" onclick="showSection('home')"          id="nav-home">         <span class="icon">🏠</span> الرئيسية</div>
@@ -155,9 +194,9 @@
       <div class="dream-panel">
         <h3>🌙 آخر عملية Dreaming</h3>
         <div id="lastDreamSummary" style="color:var(--text2);font-size:14px">جاري التحميل...</div>
-        <div style="margin-top:14px;display:flex;gap:10px">
-          <button class="btn btn-dream btn-sm" onclick="triggerDream(false)">▶ Dream الآن</button>
-          <button class="btn btn-outline btn-sm" onclick="triggerDream(true)">🔄 Dream كامل</button>
+        <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-dream btn-sm" id="btnDreamNow" onclick="triggerDream(false)">▶ Dream الآن</button>
+          <button class="btn btn-outline btn-sm" id="btnDreamFull" onclick="triggerDream(true)">🔄 Dream كامل</button>
         </div>
       </div>
       <h3 style="margin-bottom:14px;color:var(--text2);font-size:15px">📖 آخر صفحات Wiki</h3>
@@ -196,6 +235,11 @@
         <div class="tab"        onclick="loadWiki('index')"  id="wtab-index">🗂 الفهرس</div>
       </div>
       <div id="wikiList" class="grid"></div>
+      <div id="wikiPagination" class="pagination" style="display:none">
+        <button class="btn btn-outline btn-sm" id="wikiPrevBtn" onclick="wikiPage(-1)">← السابق</button>
+        <span id="wikiPageInfo"></span>
+        <button class="btn btn-outline btn-sm" id="wikiNextBtn" onclick="wikiPage(1)">التالي →</button>
+      </div>
       <div id="wikiViewer" style="display:none">
         <button class="btn btn-outline btn-sm" onclick="closeWikiViewer()" style="margin-bottom:16px">← رجوع</button>
         <div class="wiki-viewer" id="wikiContent"></div>
@@ -208,15 +252,21 @@
         <h2>💬 المحادثات</h2>
         <p>كل محادثاتك المستوردة</p>
       </div>
-      <div style="margin-bottom:20px">
-        <select class="search-mode" id="convSource" onchange="loadConversations()">
+      <div style="margin-bottom:20px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <select class="search-mode" id="convSource" onchange="resetConvPagination()">
           <option value="">كل المصادر</option>
           <option value="chatgpt">ChatGPT</option>
           <option value="claude">Claude</option>
           <option value="gemini">Gemini</option>
         </select>
+        <span id="convTotalLabel" style="color:var(--text2);font-size:13px"></span>
       </div>
       <div id="convList" class="grid"></div>
+      <div id="convPagination" class="pagination" style="display:none">
+        <button class="btn btn-outline btn-sm" id="convPrevBtn" onclick="convPage(-1)">← السابق</button>
+        <span id="convPageInfo"></span>
+        <button class="btn btn-outline btn-sm" id="convNextBtn" onclick="convPage(1)">التالي →</button>
+      </div>
       <div id="convViewer" style="display:none">
         <button class="btn btn-outline btn-sm" onclick="closeConvViewer()" style="margin-bottom:16px">← رجوع</button>
         <div class="wiki-viewer" id="convContent"></div>
@@ -227,7 +277,7 @@
     <div id="section-upload" class="tab-content">
       <div class="page-header">
         <h2>📥 استيراد المحادثات</h2>
-        <p>ارفع ملفات Export من ChatGPT أو Claude</p>
+        <p>ارفع ملفات Export من ChatGPT أو Claude أو Gemini</p>
       </div>
 
       <div class="upload-zone" id="uploadZone"
@@ -237,7 +287,7 @@
            ondrop="handleDrop(event)">
         <div class="uicon">📁</div>
         <h3>اسحب الملف هنا أو اضغط للاختيار</h3>
-        <p>يدعم: ZIP من ChatGPT · JSON أو ZIP من Claude</p>
+        <p>يدعم: ZIP أو JSON من ChatGPT · Claude · Gemini &nbsp;|&nbsp; الحد الأقصى: 500 MB</p>
         <input type="file" id="fileInput" accept=".json,.zip" onchange="uploadFile(this.files[0])">
       </div>
 
@@ -257,7 +307,7 @@
         <div style="color:var(--text2);font-size:14px;line-height:2">
           <b style="color:var(--text)">ChatGPT:</b> Settings → Data controls → Export data → ستصلك ZIP على الإيميل<br>
           <b style="color:var(--text)">Claude:</b> Settings → Privacy → Export conversations → ZIP أو JSON<br>
-          <b style="color:var(--text)">Gemini:</b> Google Takeout → اختر Gemini Apps
+          <b style="color:var(--text)">Gemini:</b> Google Takeout → اختر "Gemini Apps Activity" → تنزيل ZIP
         </div>
       </div>
     </div>
@@ -273,9 +323,13 @@
         <p style="color:var(--text2);font-size:14px;margin-bottom:14px">
           6 مراحل: DIGEST → CLUSTER → WRITE → CONNECT → COMPRESS → INDEX
         </p>
-        <div style="display:flex;gap:10px">
-          <button class="btn btn-dream" onclick="triggerDream(false)">▶ Dream تدريجي</button>
-          <button class="btn btn-outline" onclick="triggerDream(true)">🔄 Dream كامل</button>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-dream" id="btnDreamNow2" onclick="triggerDream(false)">▶ Dream تدريجي</button>
+          <button class="btn btn-outline" id="btnDreamFull2" onclick="triggerDream(true)">🔄 Dream كامل</button>
+        </div>
+        <div id="dreamRunningMsg" style="display:none;margin-top:12px;color:var(--dream);font-size:13px">
+          <span class="spinner" style="width:14px;height:14px;border-width:2px"></span>
+          Dream يعمل الآن... سيتم تحديث السجل تلقائياً.
         </div>
       </div>
       <h3 style="margin-bottom:14px;color:var(--text2);font-size:15px">📋 سجل Dream</h3>
@@ -289,6 +343,20 @@
 
 <script>
 const API = '/api';
+const CONV_PAGE_SIZE = 50;
+const WIKI_PAGE_SIZE = 50;
+
+// ══════════════════════════════════════════════
+// Mobile sidebar
+// ══════════════════════════════════════════════
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sidebarOverlay').classList.toggle('open');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebarOverlay').classList.remove('open');
+}
 
 // ══════════════════════════════════════════════
 // Navigation
@@ -298,15 +366,18 @@ function showSection(name) {
   document.querySelectorAll('.nav-item').forEach(el  => el.classList.remove('active'));
   document.getElementById('section-' + name).classList.add('active');
   document.getElementById('nav-'     + name).classList.add('active');
-  if (name === 'wiki')          loadWiki('topic');
-  if (name === 'conversations') loadConversations();
+  closeSidebar();
+  if (name === 'wiki')          { _wikiOffset = 0; loadWiki(_wikiType || 'topic'); }
+  if (name === 'conversations') { _convOffset = 0; loadConversations(); }
   if (name === 'dream')         loadDreamLog();
   if (name === 'home')          loadHome();
 }
 
 // ══════════════════════════════════════════════
-// Stats
+// Stats + Dream running indicator
 // ══════════════════════════════════════════════
+let _dreamWasRunning = false;
+
 async function loadStats() {
   try {
     const d = await fetch(`${API}/stats`).then(r => r.json());
@@ -316,6 +387,23 @@ async function loadStats() {
     document.getElementById('statDream').textContent  = d.last_dream
       ? new Date(d.last_dream).toLocaleDateString('ar') + ' · ' + (d.last_dream_status || '')
       : 'لم يبدأ بعد';
+
+    // Dream running indicator
+    const isRunning = d.dream_running;
+    document.getElementById('dreamRunningBadge').style.display = isRunning ? 'block' : 'none';
+    document.getElementById('dreamRunningMsg').style.display   = isRunning ? 'block' : 'none';
+    ['btnDreamNow','btnDreamNow2','btnDreamFull','btnDreamFull2'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.disabled = isRunning;
+    });
+
+    // If dream just finished, reload dream log + home
+    if (_dreamWasRunning && !isRunning) {
+      loadDreamLog();
+      loadHome();
+      showToast('✅ Dream اكتمل!', 'success');
+    }
+    _dreamWasRunning = isRunning;
   } catch(e) { /* ignore */ }
 }
 
@@ -330,25 +418,28 @@ async function loadHome() {
     const el = document.getElementById('lastDreamSummary');
     if (l) {
       const c = l.status === 'done' ? 'var(--green)' : l.status === 'running' ? 'var(--yellow)' : 'var(--red)';
+      const finished = l.finished_at ? ' · انتهى ' + new Date(l.finished_at).toLocaleTimeString('ar') : '';
       el.innerHTML = `<span style="color:${c}">● ${l.status}</span>
-        &nbsp;|&nbsp; ${new Date(l.started_at).toLocaleString('ar')}
+        &nbsp;|&nbsp; ${new Date(l.started_at).toLocaleString('ar')}${finished}
         &nbsp;|&nbsp; ${l.conversations} محادثة
         &nbsp;|&nbsp; ${l.pages_created} صفحة جديدة
-        &nbsp;|&nbsp; ${l.insights} insights`;
+        &nbsp;|&nbsp; ${l.insights} insights`
+        + (l.summary ? `<div style="margin-top:8px;font-size:12px;color:var(--text2)">${esc(l.summary)}</div>` : '');
     } else {
       el.textContent = 'لم يتم تشغيل Dream بعد. ارفع محادثات ثم اضغط تشغيل.';
     }
   } catch(e) {}
 
   try {
-    const pages = await fetch(`${API}/wiki?limit=6`).then(r => r.json());
+    const data = await fetch(`${API}/wiki?limit=6`).then(r => r.json());
+    const pages = data.items || data;   // دعم كلا الصيغتين
     const el = document.getElementById('recentPages');
-    if (!pages.length) {
+    if (!pages || !pages.length) {
       el.innerHTML = '<p style="color:var(--text2)">لا توجد صفحات بعد. استورد محادثات ثم شغّل Dream.</p>';
     } else {
       el.innerHTML = pages.map(p => `
-        <div class="card" onclick="showSection('wiki');setTimeout(()=>openWikiPage('${p.slug}'),100)">
-          <div class="card-title">${p.title}</div>
+        <div class="card" onclick="showSection('wiki');setTimeout(()=>openWikiPage('${esc(p.slug)}'),100)">
+          <div class="card-title">${esc(p.title)}</div>
           <div class="card-meta">
             <span class="badge badge-${p.type}">${p.type}</span>
             <span>${new Date(p.updated_at).toLocaleDateString('ar')}</span>
@@ -368,7 +459,13 @@ async function doSearch() {
   const el = document.getElementById('searchResults');
   el.innerHTML = '<span class="spinner"></span> جاري البحث...';
   try {
-    const results = await fetch(`${API}/search?q=${encodeURIComponent(q)}&mode=${mode}&limit=15`).then(r => r.json());
+    const res     = await fetch(`${API}/search?q=${encodeURIComponent(q)}&mode=${mode}&limit=15`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      el.innerHTML = `<p style="color:var(--red)">❌ ${err.detail || 'خطأ في البحث'}</p>`;
+      return;
+    }
+    const results = await res.json();
     if (!results.length) { el.innerHTML = '<p style="color:var(--text2)">لا نتائج.</p>'; return; }
     el.innerHTML = `<p style="color:var(--text2);margin-bottom:14px">${results.length} نتيجة</p><div class="grid">`
       + results.map(r => `
@@ -377,35 +474,75 @@ async function doSearch() {
             <span class="badge badge-${r.source||'topic'}">${r.source||r.type||''}</span>
             <span class="score">${r.score ? (r.score*100).toFixed(0)+'%' : ''}</span>
           </div>
-          <div class="card-title" style="font-size:13px">${r.conversation||''}</div>
-          <div class="card-content">${r.content}</div>
+          <div class="card-title" style="font-size:13px">${esc(r.conversation||'')}</div>
+          <div class="card-content">${esc(r.content)}</div>
         </div>`).join('')
       + '</div>';
-  } catch(e) { el.innerHTML = '<p style="color:var(--red)">خطأ في البحث</p>'; }
+  } catch(e) { el.innerHTML = '<p style="color:var(--red)">خطأ في الاتصال</p>'; }
 }
 
 // ══════════════════════════════════════════════
-// Wiki
+// Wiki  (with pagination)
 // ══════════════════════════════════════════════
+let _wikiOffset = 0;
+let _wikiTotal  = 0;
+let _wikiType   = 'topic';
+
 async function loadWiki(type) {
+  _wikiType = type;
   document.querySelectorAll('[id^="wtab-"]').forEach(t => t.classList.remove('active'));
   document.getElementById('wtab-' + type).classList.add('active');
-  document.getElementById('wikiList').style.display   = 'grid';
-  document.getElementById('wikiViewer').style.display = 'none';
-  const pages = await fetch(`${API}/wiki?page_type=${type}&limit=100`).then(r => r.json());
+  document.getElementById('wikiList').style.display    = 'grid';
+  document.getElementById('wikiViewer').style.display  = 'none';
+
   const el = document.getElementById('wikiList');
-  if (!pages.length) { el.innerHTML = '<p style="color:var(--text2)">لا توجد صفحات من هذا النوع بعد.</p>'; return; }
-  el.innerHTML = pages.map(p => `
-    <div class="card" onclick="openWikiPage('${p.slug}')">
-      <div class="card-title">${p.title}</div>
-      <div class="card-meta"><span>${new Date(p.updated_at).toLocaleDateString('ar')}</span></div>
-    </div>`).join('');
+  el.innerHTML = '<span class="spinner"></span>';
+
+  try {
+    const data  = await fetch(`${API}/wiki?page_type=${type}&limit=${WIKI_PAGE_SIZE}&offset=${_wikiOffset}`).then(r => r.json());
+    const pages = data.items || data;
+    _wikiTotal  = data.total  || pages.length;
+
+    if (!pages.length) {
+      el.innerHTML = '<p style="color:var(--text2)">لا توجد صفحات من هذا النوع بعد.</p>';
+      document.getElementById('wikiPagination').style.display = 'none';
+      return;
+    }
+
+    el.innerHTML = pages.map(p => `
+      <div class="card" onclick="openWikiPage('${esc(p.slug)}')">
+        <div class="card-title">${esc(p.title)}</div>
+        <div class="card-meta"><span>${new Date(p.updated_at).toLocaleDateString('ar')}</span></div>
+      </div>`).join('');
+
+    // Pagination
+    const pg = document.getElementById('wikiPagination');
+    if (_wikiTotal > WIKI_PAGE_SIZE) {
+      pg.style.display = 'flex';
+      const currentPage = Math.floor(_wikiOffset / WIKI_PAGE_SIZE) + 1;
+      const totalPages  = Math.ceil(_wikiTotal / WIKI_PAGE_SIZE);
+      document.getElementById('wikiPageInfo').textContent = `صفحة ${currentPage} من ${totalPages}`;
+      document.getElementById('wikiPrevBtn').disabled = _wikiOffset === 0;
+      document.getElementById('wikiNextBtn').disabled = (_wikiOffset + WIKI_PAGE_SIZE) >= _wikiTotal;
+    } else {
+      pg.style.display = 'none';
+    }
+  } catch(e) {
+    el.innerHTML = '<p style="color:var(--red)">خطأ في التحميل</p>';
+  }
+}
+
+function wikiPage(dir) {
+  _wikiOffset = Math.max(0, _wikiOffset + dir * WIKI_PAGE_SIZE);
+  loadWiki(_wikiType);
+  window.scrollTo(0, 0);
 }
 
 async function openWikiPage(slug) {
-  document.getElementById('wikiList').style.display   = 'none';
-  document.getElementById('wikiViewer').style.display = 'block';
-  document.getElementById('wikiContent').innerHTML    = '<span class="spinner"></span>';
+  document.getElementById('wikiList').style.display    = 'none';
+  document.getElementById('wikiPagination').style.display = 'none';
+  document.getElementById('wikiViewer').style.display  = 'block';
+  document.getElementById('wikiContent').innerHTML     = '<span class="spinner"></span>';
   const page = await fetch(`${API}/wiki/${slug}`).then(r => r.json());
   document.getElementById('wikiContent').innerHTML = `
     <div class="wiki-meta">
@@ -413,48 +550,97 @@ async function openWikiPage(slug) {
       <span style="color:var(--text2);font-size:13px">آخر تحديث: ${new Date(page.updated_at).toLocaleString('ar')}</span>
       <span style="color:var(--text2);font-size:11px;opacity:.6">sha:${page.sha||'—'}</span>
     </div>
-    <h1>${page.title}</h1>
+    <h1>${esc(page.title)}</h1>
     <div style="margin-top:20px">${mdToHtml(page.content)}</div>`;
 }
 
 function closeWikiViewer() {
   document.getElementById('wikiList').style.display   = 'grid';
   document.getElementById('wikiViewer').style.display = 'none';
+  if (_wikiTotal > WIKI_PAGE_SIZE)
+    document.getElementById('wikiPagination').style.display = 'flex';
 }
 
 // ══════════════════════════════════════════════
-// Conversations
+// Conversations  (with pagination)
 // ══════════════════════════════════════════════
+let _convOffset = 0;
+let _convTotal  = 0;
+
+function resetConvPagination() {
+  _convOffset = 0;
+  loadConversations();
+}
+
 async function loadConversations() {
   const source = document.getElementById('convSource').value;
   document.getElementById('convList').style.display   = 'grid';
   document.getElementById('convViewer').style.display = 'none';
-  const data = await fetch(`${API}/conversations?limit=100${source?'&source='+source:''}`).then(r=>r.json());
+
   const el = document.getElementById('convList');
-  if (!data.items.length) { el.innerHTML = '<p style="color:var(--text2)">لا توجد محادثات. استورد ملفات أولاً.</p>'; return; }
-  el.innerHTML = `<div style="grid-column:1/-1;color:var(--text2);font-size:14px">${data.total} محادثة</div>`
-    + data.items.map(c => `
+  el.innerHTML = '<span class="spinner"></span>';
+
+  try {
+    const data = await fetch(
+      `${API}/conversations?limit=${CONV_PAGE_SIZE}&offset=${_convOffset}${source?'&source='+source:''}`
+    ).then(r => r.json());
+
+    _convTotal = data.total || 0;
+    document.getElementById('convTotalLabel').textContent = `${_convTotal} محادثة`;
+
+    if (!data.items || !data.items.length) {
+      el.innerHTML = '<p style="color:var(--text2)">لا توجد محادثات. استورد ملفات أولاً.</p>';
+      document.getElementById('convPagination').style.display = 'none';
+      return;
+    }
+
+    el.innerHTML = data.items.map(c => `
       <div class="card" onclick="openConversation(${c.id})">
-        <div class="card-title">${c.title||'بدون عنوان'}</div>
+        <div class="card-title">${esc(c.title||'بدون عنوان')}</div>
         <div class="card-meta">
           <span class="badge badge-${c.source}">${c.source}</span>
           <span>${c.messages_count} رسالة</span>
           <span>${c.created_at ? new Date(c.created_at).toLocaleDateString('ar') : '—'}</span>
+          <span class="badge ${c.is_digested ? 'badge-digested' : 'badge-pending'}">${c.is_digested ? '✓ مُعالَج' : '⏳ لم يُعالَج'}</span>
         </div>
       </div>`).join('');
+
+    // Pagination
+    const pg = document.getElementById('convPagination');
+    if (_convTotal > CONV_PAGE_SIZE) {
+      pg.style.display = 'flex';
+      const currentPage = Math.floor(_convOffset / CONV_PAGE_SIZE) + 1;
+      const totalPages  = Math.ceil(_convTotal / CONV_PAGE_SIZE);
+      document.getElementById('convPageInfo').textContent = `صفحة ${currentPage} من ${totalPages}`;
+      document.getElementById('convPrevBtn').disabled = _convOffset === 0;
+      document.getElementById('convNextBtn').disabled = (_convOffset + CONV_PAGE_SIZE) >= _convTotal;
+    } else {
+      pg.style.display = 'none';
+    }
+  } catch(e) {
+    el.innerHTML = '<p style="color:var(--red)">خطأ في التحميل</p>';
+  }
+}
+
+function convPage(dir) {
+  _convOffset = Math.max(0, _convOffset + dir * CONV_PAGE_SIZE);
+  loadConversations();
+  window.scrollTo(0, 0);
 }
 
 async function openConversation(id) {
-  document.getElementById('convList').style.display   = 'none';
-  document.getElementById('convViewer').style.display = 'block';
-  document.getElementById('convContent').innerHTML    = '<span class="spinner"></span>';
+  document.getElementById('convList').style.display    = 'none';
+  document.getElementById('convPagination').style.display = 'none';
+  document.getElementById('convViewer').style.display  = 'block';
+  document.getElementById('convContent').innerHTML     = '<span class="spinner"></span>';
   const conv = await fetch(`${API}/conversations/${id}`).then(r => r.json());
   document.getElementById('convContent').innerHTML = `
     <div class="wiki-meta">
       <span class="badge badge-${conv.source}">${conv.source}</span>
       <span style="color:var(--text2);font-size:13px">${conv.created_at?new Date(conv.created_at).toLocaleDateString('ar'):''}</span>
+      <span class="badge ${conv.is_digested ? 'badge-digested' : 'badge-pending'}">${conv.is_digested ? '✓ مُعالَج' : '⏳ لم يُعالَج بعد'}</span>
     </div>
-    <h1 style="margin-bottom:20px">${conv.title||'بدون عنوان'}</h1>`
+    <h1 style="margin-bottom:20px">${esc(conv.title||'بدون عنوان')}</h1>`
     + conv.messages.map(m => `
       <div style="margin-bottom:14px;padding:14px;border-radius:8px;
            background:${m.role==='user'?'var(--bg3)':'rgba(124,58,237,0.07)'};
@@ -470,6 +656,8 @@ async function openConversation(id) {
 function closeConvViewer() {
   document.getElementById('convList').style.display   = 'grid';
   document.getElementById('convViewer').style.display = 'none';
+  if (_convTotal > CONV_PAGE_SIZE)
+    document.getElementById('convPagination').style.display = 'flex';
 }
 
 // ══════════════════════════════════════════════
@@ -484,14 +672,18 @@ function handleDrop(e) {
 async function uploadFile(file) {
   if (!file) return;
 
-  // Reset UI
+  // التحقق من الحجم على جانب العميل أيضاً
+  if (file.size > 500 * 1024 * 1024) {
+    showToast('❌ حجم الملف يتجاوز 500 MB', 'error');
+    return;
+  }
+
   setProgress(true, 'جاري رفع الملف...', 10);
   document.getElementById('progressResult').style.display = 'none';
   document.getElementById('progressTitle').textContent = file.name;
 
   const fd = new FormData();
   fd.append('file', file);
-  // Reset file input so same file can be re-uploaded
   document.getElementById('fileInput').value = '';
 
   let job_id;
@@ -505,7 +697,6 @@ async function uploadFile(file) {
     return;
   }
 
-  // Poll for completion
   setProgress(true, 'جاري معالجة المحادثات وتوليد الـ Embeddings...', 30);
   pollJob(job_id, 0);
 }
@@ -515,20 +706,19 @@ async function pollJob(job_id, tick) {
     const data = await fetch(`${API}/ingest/status/${job_id}`).then(r => r.json());
 
     if (data.status === 'running') {
-      // Animate progress bar (30 → 90 over time)
       const pct = Math.min(90, 30 + tick * 3);
-      setProgress(true, `جاري معالجة المحادثات... (chunk ${tick+1})`, pct);
+      setProgress(true, `جاري معالجة المحادثات... (${tick+1})`, pct);
       setTimeout(() => pollJob(job_id, tick + 1), 2000);
 
     } else if (data.status === 'done') {
       setProgress(true, 'اكتمل الاستيراد!', 100);
       const resultEl = document.getElementById('progressResult');
       if (data.error) {
-        resultEl.className = 'progress-result err';
+        resultEl.className  = 'progress-result err';
         resultEl.textContent = '⚠️ ' + data.error;
       } else {
-        resultEl.className = 'progress-result ok';
-        resultEl.innerHTML = `✅ تم الاستيراد بنجاح!&nbsp;&nbsp;
+        resultEl.className  = 'progress-result ok';
+        resultEl.innerHTML  = `✅ تم الاستيراد بنجاح!&nbsp;&nbsp;
           <b>${data.saved}</b> محادثة جديدة &nbsp;·&nbsp;
           ${data.skipped} مكررة &nbsp;·&nbsp;
           المجموع ${data.total}`;
@@ -556,7 +746,7 @@ function showProgressError(msg) {
   setProgress(true, msg, 0);
   document.getElementById('progressBar').style.background = 'var(--red)';
   const r = document.getElementById('progressResult');
-  r.className = 'progress-result err';
+  r.className  = 'progress-result err';
   r.textContent = msg;
   r.style.display = 'block';
 }
@@ -565,21 +755,31 @@ function showProgressError(msg) {
 // Dream
 // ══════════════════════════════════════════════
 async function triggerDream(full) {
-  showToast('🌙 بدأ Dream في الخلفية...', 'success');
-  await fetch(`${API}/dream?full=${full}`, { method: 'POST' });
-  setTimeout(() => { loadStats(); if(document.getElementById('section-dream').classList.contains('active')) loadDreamLog(); }, 2500);
+  const res  = await fetch(`${API}/dream?full=${full}`, { method: 'POST' });
+  const data = await res.json();
+  if (data.status === 'already_running') {
+    showToast('⚠️ Dream يعمل بالفعل في الخلفية', 'error');
+  } else {
+    showToast('🌙 بدأ Dream في الخلفية...', 'success');
+    _dreamWasRunning = true;
+    loadStats();
+    if (document.getElementById('section-dream').classList.contains('active'))
+      setTimeout(loadDreamLog, 1500);
+  }
 }
 
 async function loadDreamLog() {
   const logs = await fetch(`${API}/dreams`).then(r => r.json());
-  const el = document.getElementById('dreamLog');
+  const el   = document.getElementById('dreamLog');
   if (!logs.length) { el.innerHTML = '<p style="color:var(--text2)">لم يتم تشغيل Dream بعد.</p>'; return; }
   el.innerHTML = logs.map(l => {
-    const c = l.status==='done'?'var(--green)':l.status==='running'?'var(--yellow)':'var(--red)';
+    const c       = l.status==='done'?'var(--green)':l.status==='running'?'var(--yellow)':'var(--red)';
+    const elapsed = (l.finished_at && l.started_at)
+      ? ` · ${Math.round((new Date(l.finished_at)-new Date(l.started_at))/60000)} دقيقة` : '';
     return `
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:12px">
+    <div class="dream-log-entry ${l.status==='running'?'running':''}">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <span style="color:${c};font-weight:bold">● ${l.status}</span>
+        <span style="color:${c};font-weight:bold">● ${l.status}${elapsed}</span>
         <span style="color:var(--text2);font-size:12px">${new Date(l.started_at).toLocaleString('ar')}</span>
       </div>
       <div class="dream-log">
@@ -588,16 +788,23 @@ async function loadDreamLog() {
         <div class="dream-item">✏️ ${l.pages_updated} محدّثة</div>
         <div class="dream-item">💡 ${l.insights} insights</div>
       </div>
+      ${l.summary ? `<div class="dream-summary">${esc(l.summary)}</div>` : ''}
     </div>`}).join('');
 }
 
 // ══════════════════════════════════════════════
 // Helpers
 // ══════════════════════════════════════════════
-function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
 function mdToHtml(md) {
   if (!md) return '';
+  if (typeof marked !== 'undefined') {
+    try {
+      marked.setOptions({ breaks: true, gfm: true });
+      return marked.parse(md);
+    } catch(e) { /* fall through */ }
+  }
   let h = esc(md);
   h = h.replace(/^# (.+)$/gm,    '<h1>$1</h1>');
   h = h.replace(/^## (.+)$/gm,   '<h2>$1</h2>');
@@ -614,10 +821,11 @@ function mdToHtml(md) {
 
 function showToast(msg, type='success') {
   const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.className   = 'toast ' + type;
+  t.textContent   = msg;
+  t.className     = 'toast ' + type;
   t.style.display = 'block';
-  setTimeout(() => t.style.display = 'none', 4000);
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.style.display = 'none', 4000);
 }
 
 // ══════════════════════════════════════════════
@@ -625,7 +833,7 @@ function showToast(msg, type='success') {
 // ══════════════════════════════════════════════
 loadStats();
 loadHome();
-setInterval(loadStats, 30000);   // refresh stats every 30s
+setInterval(loadStats, 10000);   // refresh stats every 10s (Dream polling)
 </script>
 </body>
 </html>
