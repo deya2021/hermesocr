@@ -28,7 +28,7 @@ def _run_ingest(job_id: str, file_path: str, original_filename: str):
     try:
         from ingestion.ingestion_service import IngestionService
         svc = IngestionService()
-        result = svc.ingest_file(file_path)
+        result = svc.ingest_file(file_path, job_id=job_id)
 
         job = db.query(IngestJob).filter(IngestJob.id == job_id).first()
         if job:
@@ -139,13 +139,24 @@ def ingest_status(job_id: str, db: Session = Depends(get_db)):
     job = db.query(IngestJob).filter(IngestJob.id == job_id).first()
     if not job:
         raise HTTPException(404, "Job not found")
+
+    # حساب النسبة المئوية الحقيقية للتقدم
+    pct = 0
+    if job.total and job.total > 0:
+        pct = min(99, int((job.processed or 0) / job.total * 100))
+    elif job.status == "done":
+        pct = 100
+
     return {
-        "job_id":  job.id,
-        "status":  job.status,
-        "saved":   job.saved,
-        "skipped": job.skipped,
-        "total":   job.total,
-        "error":   job.error,
+        "job_id":        job.id,
+        "status":        job.status,
+        "saved":         job.saved,
+        "skipped":       job.skipped,
+        "total":         job.total,
+        "processed":     job.processed or 0,
+        "current_title": job.current_title,
+        "pct":           pct,
+        "error":         job.error,
     }
 
 

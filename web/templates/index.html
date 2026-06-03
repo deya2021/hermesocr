@@ -89,9 +89,12 @@
 
   /* progress bar */
   .progress-wrap { margin-top: 20px; background: var(--bg3); border-radius: 8px; border: 1px solid var(--border); padding: 20px; display: none; }
-  .progress-bar-bg { background: var(--bg3); border: 1px solid var(--border); border-radius: 20px; height: 10px; margin: 12px 0; overflow: hidden; }
-  .progress-bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--dream)); border-radius: 20px; transition: width 0.5s; width: 0%; }
-  .progress-status { font-size: 13px; color: var(--text2); }
+  .progress-bar-bg { background: var(--bg); border: 1px solid var(--border); border-radius: 20px; height: 12px; margin: 12px 0; overflow: hidden; }
+  .progress-bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--dream)); border-radius: 20px; transition: width 0.6s ease; width: 0%; }
+  .progress-status { font-size: 13px; color: var(--text2); margin-bottom: 6px; }
+  .progress-conv-count { font-size: 22px; font-weight: 700; color: var(--accent2); margin: 8px 0 2px; }
+  .progress-conv-label { font-size: 12px; color: var(--text2); margin-bottom: 8px; }
+  .progress-current-title { font-size: 12px; color: var(--text2); opacity: .7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; margin-bottom: 4px; }
   .progress-result { margin-top: 12px; font-size: 14px; display: none; }
   .progress-result.ok  { color: var(--green); }
   .progress-result.err { color: var(--red); }
@@ -293,11 +296,20 @@
 
       <!-- Progress section -->
       <div class="progress-wrap" id="progressWrap">
+        <!-- Header row: filename + percentage -->
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-          <span style="font-size:14px;font-weight:600" id="progressTitle">جاري الرفع...</span>
-          <span style="font-size:12px;color:var(--text2)" id="progressPct">0%</span>
+          <span style="font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:75%" id="progressTitle">جاري الرفع...</span>
+          <span style="font-size:13px;color:var(--accent2);font-weight:700" id="progressPct">0%</span>
         </div>
+        <!-- Progress bar -->
         <div class="progress-bar-bg"><div class="progress-bar-fill" id="progressBar"></div></div>
+        <!-- Live conversation counter (large) -->
+        <div id="progressConvBlock" style="display:none;text-align:center;padding:10px 0 4px">
+          <div class="progress-conv-count" id="progressConvCount">0</div>
+          <div class="progress-conv-label" id="progressConvLabel">محادثة تمت معالجتها</div>
+          <div class="progress-current-title" id="progressCurrentTitle"></div>
+        </div>
+        <!-- Status text -->
         <div class="progress-status" id="progressStatus">جاري رفع الملف...</div>
         <div class="progress-result" id="progressResult"></div>
       </div>
@@ -706,12 +718,43 @@ async function pollJob(job_id, tick) {
     const data = await fetch(`${API}/ingest/status/${job_id}`).then(r => r.json());
 
     if (data.status === 'running') {
-      const pct = Math.min(90, 30 + tick * 3);
-      setProgress(true, `جاري معالجة المحادثات... (${tick+1})`, pct);
+      // ── حساب النسبة الحقيقية إن وُجدت ──────────────────
+      const realPct = (data.pct && data.pct > 0) ? data.pct
+                    : Math.min(90, 30 + tick * 2);
+
+      // ── نص الحالة ──────────────────────────────────────
+      let statusTxt;
+      if (data.processed > 0) {
+        const totalTxt = data.total > 0 ? ` من ${data.total.toLocaleString('ar')}` : '';
+        statusTxt = `معالجة ${data.processed.toLocaleString('ar')}${totalTxt} محادثة...`;
+      } else {
+        statusTxt = 'جاري تحليل الملف...';
+      }
+      setProgress(true, statusTxt, realPct);
+
+      // ── العداد الكبير ───────────────────────────────────
+      if (data.processed > 0) {
+        const convBlock = document.getElementById('progressConvBlock');
+        convBlock.style.display = 'block';
+        document.getElementById('progressConvCount').textContent =
+          data.processed.toLocaleString('ar-EG');
+        const totalLabel = data.total > 0
+          ? `من ${data.total.toLocaleString('ar-EG')} محادثة تمت معالجتها`
+          : 'محادثة تمت معالجتها';
+        document.getElementById('progressConvLabel').textContent = totalLabel;
+        if (data.current_title) {
+          document.getElementById('progressCurrentTitle').textContent =
+            '⟳ ' + data.current_title;
+        }
+      }
+
       setTimeout(() => pollJob(job_id, tick + 1), 2000);
 
     } else if (data.status === 'done') {
-      setProgress(true, 'اكتمل الاستيراد!', 100);
+      // إخفاء العداد الكبير عند الانتهاء
+      document.getElementById('progressConvBlock').style.display = 'none';
+      setProgress(true, 'اكتمل الاستيراد! ✅', 100);
+
       const resultEl = document.getElementById('progressResult');
       if (data.error) {
         resultEl.className  = 'progress-result err';
@@ -719,11 +762,11 @@ async function pollJob(job_id, tick) {
       } else {
         resultEl.className  = 'progress-result ok';
         resultEl.innerHTML  = `✅ تم الاستيراد بنجاح!&nbsp;&nbsp;
-          <b>${data.saved}</b> محادثة جديدة &nbsp;·&nbsp;
-          ${data.skipped} مكررة &nbsp;·&nbsp;
-          المجموع ${data.total}`;
+          <b>${(data.saved||0).toLocaleString('ar-EG')}</b> محادثة جديدة &nbsp;·&nbsp;
+          ${(data.skipped||0).toLocaleString('ar-EG')} مكررة &nbsp;·&nbsp;
+          المجموع ${(data.total||0).toLocaleString('ar-EG')}`;
         loadStats();
-        showToast(`✅ تم استيراد ${data.saved} محادثة!`, 'success');
+        showToast(`✅ تم استيراد ${(data.saved||0).toLocaleString('ar-EG')} محادثة!`, 'success');
       }
       resultEl.style.display = 'block';
 
@@ -740,6 +783,8 @@ function setProgress(show, status, pct) {
   document.getElementById('progressStatus').textContent  = status;
   document.getElementById('progressBar').style.width     = pct + '%';
   document.getElementById('progressPct').textContent     = pct + '%';
+  // إعادة تعيين لون الـ progress bar إلى الافتراضي (قد يكون حُوِّل للأحمر)
+  if (pct > 0) document.getElementById('progressBar').style.background = '';
 }
 
 function showProgressError(msg) {

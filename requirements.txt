@@ -21,6 +21,7 @@ python-dotenv==1.0.1
 
 # Ingestion parsers
 python-dateutil==2.9.0
+ijson==3.3.0               # streaming JSON parser for large ChatGPT exports (>20 MB)
 
 # Scheduling (Dreaming)
 apscheduler==3.10.4
