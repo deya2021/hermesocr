@@ -23,6 +23,9 @@ def init_db():
 
     # ── Safe migrations: add new columns if they don't exist ──
     _safe_add_column("conversations", "is_digested", "BOOLEAN NOT NULL DEFAULT FALSE")
+    # IngestJob — live-progress fields (added in Phase 2)
+    _safe_add_column("ingest_jobs", "processed",     "INTEGER DEFAULT 0")
+    _safe_add_column("ingest_jobs", "current_title", "VARCHAR(500)")
     print("✅ Database initialized")
 
 

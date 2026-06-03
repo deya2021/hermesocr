@@ -44,6 +44,10 @@ templates = Jinja2Templates(directory="/home/opc/webapp/web/templates")
 async def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
+@app.head("/", response_class=HTMLResponse)
+async def index_head(request: Request):
+    return HTMLResponse(content="", status_code=200)
+
 if __name__ == "__main__":
     import uvicorn
     from config.settings import settings

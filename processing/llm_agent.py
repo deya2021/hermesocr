@@ -6,37 +6,40 @@ from config.settings import settings
 class LLMAgent:
     """
     LLM agent for wiki generation.
-    Uses llama3.2:1b (fast on CPU) with short prompts.
-    hermes3:8b is kept as fallback for future GPU use.
+    Uses hermes3:8b for high-quality Arabic/English wiki pages.
+    llama3.2:1b used only for fast JSON extraction tasks.
     """
 
     def __init__(self):
-        # llama3.2:1b is ~5x faster than hermes3:8b on CPU
-        self.model  = "llama3.2:1b"
+        self.model_quality = "hermes3:8b"    # جودة عالية — للصفحات والتحليل
+        self.model_fast    = "llama3.2:1b"   # سريع — لاستخراج JSON فقط
         self.host   = settings.ollama_host
         self.client = ollama.Client(host=self.host)
 
-        # Max tokens per call — keep short to stay fast on CPU
-        self.fast_opts   = {"temperature": 0.1, "num_predict": 300}
-        self.normal_opts = {"temperature": 0.3, "num_predict": 500}
-        self.creative_opts = {"temperature": 0.5, "num_predict": 600}
+        # hermes3:8b يحتاج tokens أكثر لجودة أفضل
+        self.fast_opts    = {"temperature": 0.1, "num_predict": 300}   # llama1b extract
+        self.normal_opts  = {"temperature": 0.2, "num_predict": 700}   # hermes8b pages
+        self.rich_opts    = {"temperature": 0.4, "num_predict": 900}   # hermes8b creative
+        self.index_opts   = {"temperature": 0.3, "num_predict": 800}   # hermes8b overview
 
     # ──────────────────────────────────────────────────────────
     # Internal
     # ──────────────────────────────────────────────────────────
 
-    # Phrases that indicate LLM refused or echoed instructions instead of generating
     _REFUSAL_PHRASES = (
         "i can't help", "i cannot help", "i'm unable", "i am unable",
-        "as an ai", "as a language model",
+        "as an ai", "as a language model", "i don't have access",
     )
 
-    def _chat(self, system: str, user: str, opts: dict = None) -> str:
+    def _chat(self, system: str, user: str, opts: dict = None,
+              model: str = None) -> str:
         if opts is None:
             opts = self.normal_opts
+        if model is None:
+            model = self.model_quality
         try:
             resp = self.client.chat(
-                model=self.model,
+                model=model,
                 messages=[
                     {"role": "system", "content": system},
                     {"role": "user",   "content": user},
@@ -49,23 +52,22 @@ class LLMAgent:
             return f"<!-- LLM ERROR: {e} -->"
 
     def _is_refused(self, text: str) -> bool:
-        """Return True if the LLM response is a refusal or too short to be useful."""
         low = text.lower()
-        if len(text) < 60:
+        if len(text) < 80:
             return True
         return any(p in low for p in self._REFUSAL_PHRASES)
 
     # ──────────────────────────────────────────────────────────
-    # 1. Extract topics  (fast — JSON array)
+    # 1. Extract topics  (llama1b — fast JSON)
     # ──────────────────────────────────────────────────────────
 
     def extract_topics(self, text: str) -> List[str]:
         system = (
-            "Extract the main topics from the conversation text. "
-            "Reply with ONLY a JSON array of short strings (2-4 words each), max 5. "
-            'Example: ["python async","database design","API security"]'
+            "Extract the main technical topics from this conversation. "
+            "Reply with ONLY a JSON array of short English strings (2-4 words each), max 6. "
+            'Example: ["python async","database design","API security","android notifications"]'
         )
-        result = self._chat(system, text[:1200], self.fast_opts)
+        result = self._chat(system, text[:1500], self.fast_opts, model=self.model_fast)
         try:
             import json
             s = result.find("[")
@@ -82,19 +84,24 @@ class LLMAgent:
 
     def summarize_conversation(self, title: str, messages_text: str) -> str:
         system = (
-            "Write a Markdown wiki page summarising this AI conversation.\n"
-            "Sections: ## Summary  ## Key Points  ## Topics\n"
-            "Be factual and concise. Max 400 words. No preamble."
+            "You are a personal knowledge wiki writer. "
+            "Write a detailed and useful Markdown wiki page summarising this AI conversation.\n\n"
+            "Requirements:\n"
+            "- Use these exact sections: ## الملخص  ## النقاط الرئيسية  ## الكود والأمثلة  ## المواضيع\n"
+            "- Write in Arabic for general content, keep technical terms in English\n"
+            "- Be specific and factual — extract real details from the conversation\n"
+            "- For code snippets, use proper Markdown code blocks with language\n"
+            "- Minimum 300 words. No generic filler text."
         )
-        user = f"Title: {title}\n\n{messages_text[:2000]}"
+        user = f"عنوان المحادثة: {title}\n\nمحتوى المحادثة:\n{messages_text[:3000]}"
         result = self._chat(system, user, self.normal_opts)
         if self._is_refused(result):
-            # Minimal fallback so the page is still meaningful
             return (
-                f"## Summary\n\nConversation: **{title}**\n\n"
-                f"*(Content too short or unavailable for auto-summary.)*\n\n"
-                f"## Key Points\n\n- See source conversation\n\n"
-                f"## Topics\n\n- General"
+                f"## الملخص\n\nمحادثة: **{title}**\n\n"
+                f"*(المحتوى غير متاح للتلخيص التلقائي.)*\n\n"
+                f"## النقاط الرئيسية\n\n- راجع المحادثة الأصلية\n\n"
+                f"## الكود والأمثلة\n\n*(لا يوجد)*\n\n"
+                f"## المواضيع\n\n- عام"
             )
         return result
 
@@ -104,39 +111,59 @@ class LLMAgent:
 
     def generate_topic_page(self, topic: str, chunks: List[str]) -> str:
         system = (
-            "You are a personal knowledge wiki writer.\n"
-            "Write a wiki page for the given topic using the conversation excerpts.\n"
-            "Markdown format:\n"
-            "## Overview\n## Key Concepts\n## Practical Notes\n## Open Questions\n"
-            "Max 500 words. Cite sources as (conv_N)."
+            "You are a personal knowledge wiki writer. "
+            "Write a comprehensive wiki page for the given topic using ONLY information "
+            "from the provided conversation excerpts.\n\n"
+            "Requirements:\n"
+            "- Use these exact Markdown sections:\n"
+            "  ## نظرة عامة\n  ## المفاهيم الأساسية\n  ## ملاحظات عملية\n  ## أسئلة مفتوحة\n"
+            "- Write in Arabic, keep technical terms/code in English\n"
+            "- Be specific: use real examples, code, commands from the excerpts\n"
+            "- Minimum 400 words. No generic text that isn't from the source."
         )
-        excerpts = "\n---\n".join(chunks[:5])
-        user = f"Topic: {topic}\n\nExcerpts:\n{excerpts[:2500]}"
-        return self._chat(system, user, self.normal_opts)
+        excerpts = "\n\n---\n\n".join(chunks[:6])
+        user = f"الموضوع: **{topic}**\n\nمقتطفات المحادثات:\n\n{excerpts[:3500]}"
+        result = self._chat(system, user, self.normal_opts)
+        if self._is_refused(result):
+            return (
+                f"## نظرة عامة\n\nموضوع: **{topic}**\n\n"
+                f"## المفاهيم الأساسية\n\n*(يتطلب مزيداً من البيانات)*\n\n"
+                f"## ملاحظات عملية\n\n*(يتطلب مزيداً من البيانات)*\n\n"
+                f"## أسئلة مفتوحة\n\n*(يتطلب مزيداً من البيانات)*"
+            )
+        return result
 
     # ──────────────────────────────────────────────────────────
-    # 4. Find cross-topic connections  (dreaming phase)
+    # 4. Find cross-topic connections  (creative dreaming phase)
     # ──────────────────────────────────────────────────────────
 
     def find_connections(self, topics: List[str], summaries: List[str]) -> str:
-        system = "You are a knowledge analyst. Output ONLY Markdown, no preamble."
-        topic_str   = ", ".join(topics[:20])
-        summary_str = "\n\n".join(s[:300] for s in summaries[:8])
-        user = (
-            f"Analyse these topics and summaries from a personal knowledge base.\n"
-            f"Write a Markdown page with EXACTLY these sections (include the headers):\n\n"
-            f"## Unexpected Connections\n## Recurring Patterns\n## Emergent Insights\n\n"
-            f"Be insightful and concise. Max 400 words.\n\n"
-            f"Topics: {topic_str}\n\nSummaries:\n{summary_str}"
+        system = (
+            "You are a knowledge analyst reviewing a personal AI conversation knowledge base. "
+            "Output ONLY Markdown, no preamble, no extra commentary."
         )
-        result = self._chat(system, user, self.creative_opts)
+        topic_str   = ", ".join(topics[:25])
+        summary_str = "\n\n---\n\n".join(s[:400] for s in summaries[:8])
+        user = (
+            "Analyse the topics and conversation summaries below from a personal knowledge base.\n"
+            "Write a Markdown page with EXACTLY these sections (in Arabic):\n\n"
+            "## روابط غير متوقعة\n"
+            "## أنماط متكررة\n"
+            "## رؤى ناشئة\n\n"
+            "Be insightful and specific — mention real topic names and connections. "
+            "Minimum 300 words.\n\n"
+            f"المواضيع: {topic_str}\n\n"
+            f"ملخصات المحادثات:\n\n{summary_str}"
+        )
+        result = self._chat(system, user, self.rich_opts)
         if self._is_refused(result):
             return (
-                "## Unexpected Connections\n\n*(Not enough data yet.)*\n\n"
-                "## Recurring Patterns\n\n- Mobile app development (WawApp)\n"
-                "- Android system APIs\n\n"
-                "## Emergent Insights\n\n"
-                "- Multiple conversations relate to Android foreground services and notifications."
+                "## روابط غير متوقعة\n\n*(لا توجد بيانات كافية بعد.)*\n\n"
+                "## أنماط متكررة\n\n"
+                "- تطوير تطبيقات Android (WawApp)\n"
+                "- واجهات برمجة Android النظامية\n\n"
+                "## رؤى ناشئة\n\n"
+                "- محادثات متعددة تتعلق بـ Android foreground services و notifications."
             )
         return result
 
@@ -146,12 +173,21 @@ class LLMAgent:
 
     def compress_knowledge(self, old_page: str, new_chunks: List[str]) -> str:
         system = (
-            "Merge new information into this wiki page.\n"
-            "Keep existing content, add new insights, remove duplicates.\n"
-            "Mark additions with '🆕'. Return full updated Markdown page. Max 600 words."
+            "You are updating a personal knowledge wiki page. "
+            "Merge the new information into the existing page.\n"
+            "Rules:\n"
+            "- Keep all existing content\n"
+            "- Add genuinely new information under existing sections or new sections\n"
+            "- Remove obvious duplicates\n"
+            "- Mark new additions with '🆕'\n"
+            "- Return the FULL updated Markdown page\n"
+            "- Maintain Arabic language and structure"
         )
-        new_text = "\n---\n".join(new_chunks[:3])
-        user = f"EXISTING PAGE:\n{old_page[:1500]}\n\nNEW INFO:\n{new_text[:1000]}"
+        new_text = "\n\n---\n\n".join(new_chunks[:4])
+        user = (
+            f"الصفحة الحالية:\n\n{old_page[:2000]}\n\n"
+            f"معلومات جديدة للإضافة:\n\n{new_text[:1500]}"
+        )
         return self._chat(system, user, self.normal_opts)
 
     # ──────────────────────────────────────────────────────────
@@ -159,28 +195,34 @@ class LLMAgent:
     # ──────────────────────────────────────────────────────────
 
     def generate_overview(self, all_topics: List[str], stats: Dict) -> str:
-        system = "You are a wiki writer. Output ONLY Markdown, no preamble."
-        user = (
-            f"Write a master overview page for a personal AI conversation wiki.\n"
-            f"Include EXACTLY these sections:\n\n"
-            f"## My Knowledge Universe\n## Most Explored Topics\n"
-            f"## Knowledge Clusters\n## Learning Journey\n\n"
-            f"Max 500 words. Be concise and specific.\n\n"
-            f"Stats: {stats.get('conversations',0)} conversations, "
-            f"{stats.get('topics',0)} topics, "
-            f"date range: {stats.get('date_range','unknown')}\n\n"
-            f"Topics: {', '.join(all_topics[:40])}"
+        system = (
+            "You are a wiki writer creating a master overview page. "
+            "Output ONLY Markdown, no preamble."
         )
-        result = self._chat(system, user, self.creative_opts)
+        topics_list = ", ".join(all_topics[:50])
+        user = (
+            "Write a master overview page for a personal AI conversation knowledge base.\n"
+            "Use EXACTLY these sections (in Arabic):\n\n"
+            "## كون المعرفة الخاص بي\n"
+            "## أكثر المواضيع استكشافاً\n"
+            "## مجموعات المعرفة\n"
+            "## رحلة التعلم\n\n"
+            "Be specific, insightful, and use real topic names. Minimum 400 words.\n\n"
+            f"الإحصائيات: {stats.get('conversations',0)} محادثة، "
+            f"{stats.get('topics',0)} موضوع، "
+            f"الفترة الزمنية: {stats.get('date_range','غير معروف')}\n\n"
+            f"المواضيع: {topics_list}"
+        )
+        result = self._chat(system, user, self.index_opts)
         if self._is_refused(result):
-            topics_list = "\n".join(f"- {t}" for t in all_topics[:10])
+            topics_md = "\n".join(f"- {t}" for t in all_topics[:15])
             return (
-                f"## My Knowledge Universe\n\n"
-                f"This wiki contains {stats.get('conversations',0)} conversations "
-                f"spanning {stats.get('date_range','unknown')}.\n\n"
-                f"## Most Explored Topics\n\n{topics_list}\n\n"
-                f"## Knowledge Clusters\n\n- Mobile app development\n- Android APIs\n\n"
-                f"## Learning Journey\n\n"
-                f"- {stats.get('topics',0)} distinct topics identified across all conversations."
+                f"## كون المعرفة الخاص بي\n\n"
+                f"هذا الـ Wiki يحتوي على {stats.get('conversations',0)} محادثة "
+                f"تمتد من {stats.get('date_range','غير معروف')}.\n\n"
+                f"## أكثر المواضيع استكشافاً\n\n{topics_md}\n\n"
+                f"## مجموعات المعرفة\n\n- تطوير تطبيقات الموبايل\n- Android APIs\n\n"
+                f"## رحلة التعلم\n\n"
+                f"- تم تحديد {stats.get('topics',0)} موضوع فريد عبر جميع المحادثات."
             )
         return result

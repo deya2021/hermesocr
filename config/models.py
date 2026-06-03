@@ -96,7 +96,9 @@ class IngestJob(Base):
     filename = Column(String(500))
     saved = Column(Integer, default=0)
     skipped = Column(Integer, default=0)
-    total = Column(Integer, default=0)
+    total = Column(Integer, default=0)              # إجمالي المحادثات المكتشفة
+    processed = Column(Integer, default=0)          # عدد المعالَجة حتى الآن (للـ progress bar)
+    current_title = Column(String(500))             # عنوان المحادثة الجارية
     error = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
     finished_at = Column(DateTime)
